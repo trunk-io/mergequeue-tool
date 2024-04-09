@@ -30,6 +30,11 @@ jobs:
             sudo apt install -y binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu;
           fi
 
+      - name: update version
+        run:
+          sed -i "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/"
+          Cargo.toml
+
       - name: Build --release
         run: cargo build --release --target ${{ matrix.target }}
         env:
