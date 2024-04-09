@@ -1,0 +1,27 @@
+[package]
+name = "mq"
+version = "1.0.0"
+license = "MIT"
+description = "mq - pull request generator for GitHub"
+readme = "README.md"
+edition = "2021"
+
+[lib]
+name = "gen"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0.64"
+clap = { version = "4.0.8", features = ["derive"] }
+env_logger = "0.9.1"
+lazy_static = "1.4.0"
+log = "0.4.17"
+regex = "1.6.0"
+confique = "0.2.5"
+serde = "1.0.197"
+toml = "0.8.12"
+rand = "0.8.5"
+walkdir = "2.5.0"
+parse_duration = "2.1.1"
+serde_json = "1.0.115"
+chrono = "0.4.37"
