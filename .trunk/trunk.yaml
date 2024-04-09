@@ -1,0 +1,30 @@
+version: 0.1
+cli:
+  version: 1.21.0
+plugins:
+  sources:
+    - id: trunk
+      ref: v1.4.5
+      uri: https://github.com/trunk-io/plugins
+    - id: configs
+      uri: https://github.com/trunk-io/configs
+      ref: v1.0.4
+runtimes:
+  enabled:
+    - node@18.12.1
+    - python@3.10.8
+
+lint:
+  enabled:
+    - clippy@1.77.0
+
+actions:
+  enabled:
+    - trunk-announce
+    - trunk-check-pre-push
+    - trunk-fmt-pre-commit
+    - trunk-upgrade-available
+
+tools:
+  enabled:
+    - jq@jq-1.7.1
