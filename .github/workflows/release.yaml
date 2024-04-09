@@ -72,6 +72,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create --generate-notes 
-           --target ${{ github.ref }}  \
-            ${{ github.event.inputs.release_tag }} ./build/*.tar.gz
+          gh release create --target ${{ github.ref }}  \
+            ${{ github.event.inputs.release_tag }} ./build/*.tar.gz --generate-notes
