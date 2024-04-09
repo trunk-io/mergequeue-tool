@@ -7,6 +7,7 @@ characteristics of repository managed by trunk merge graph under different simul
 
 #### How does it work
 
+```bash
 Usage: mq [OPTIONS] [COMMAND]
 
 Commands:
@@ -20,6 +21,7 @@ Options:
       --gh-token <GH_TOKEN>  [default: ]
   -h, --help                 Print help
   -V, --version              Print version
+```
 
 #### Configuration
 
