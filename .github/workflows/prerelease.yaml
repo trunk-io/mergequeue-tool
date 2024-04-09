@@ -1,4 +1,4 @@
-name: release prelease version
+name: prelease tool
 on:
   workflow_dispatch:
     inputs:
