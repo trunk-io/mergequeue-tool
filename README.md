@@ -7,11 +7,28 @@ characteristics of repository managed by trunk merge graph under different simul
 
 #### How does it work
 
+Usage: mq [OPTIONS] [COMMAND]
+
+Commands:
+  generate       Generate pull requests
+  test-sim       Simulate a test with flake rate in consideration
+  housekeeping   Clean out conflicting PRs and requeue failed PRs
+  config         Print current configuration content to json
+  defaultconfig  Generate default configuration content for generator    
+
+Options:
+      --gh-token <GH_TOKEN>  [default: ]
+  -h, --help                 Print help
+  -V, --version              Print version
+
+#### Configuration
+
 The load imparted onto the connected queue is controlled by the `mq.toml` file in the .config
 folder.
 
 The configuration system allows for setting the desired load on the queue, the flake rate and the
-interdependence element of the pull requests.
+interdependence element of the pull requests. The tooling is designed to generate pull requests assuming 
+`mq generate` is called every 10 minutes. 
 
 ```toml
 # parallelqueue - will push deps information to the service to take advantage of trunk merge dynamic parallel queues
