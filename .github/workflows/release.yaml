@@ -1,4 +1,4 @@
-name: Release Generator
+name: release tool
 on:
   workflow_dispatch:
     inputs:
