@@ -985,7 +985,6 @@ absolutism
 aeronef
 absolutist
 absolutista
-absolutistically
 absolutists
 absolutive
 absolutization
@@ -4769,6 +4768,7 @@ aegagropile
 aegagropiles
 aegagrus
 aegean
+absolutistically
 aegemony
 aeger
 aegeriid
@@ -5067,6 +5067,7 @@ aerophagy
 aerophagia
 aerophagist
 aerophane
+archichlamydeae
 aerophilately
 aerophilatelic
 aerophilatelist
@@ -18916,7 +18917,6 @@ archicantor
 archicarp
 archicerebra
 archicerebrum
-archichlamydeae
 archichlamydeous
 archicyte
 archicytula
