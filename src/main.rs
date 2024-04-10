@@ -256,7 +256,7 @@ fn create_pull_request(
     }
 
     if dry_run {
-        // no matter what is result - need to reset checkout
+        println!("finished");
         git(&["checkout", &current_branch]);
         git(&["pull"]);
         return Ok((last_pr + 1).to_string());
