@@ -6570,7 +6570,6 @@ agst
 agt
 agtbasic
 agua
-aguacate
 aguacateca
 aguada
 aguador
@@ -21020,6 +21019,7 @@ ascolichenes
 ascoma
 ascomata
 ascomycetal
+aguacate
 ascomycete
 ascomycetes
 ascomycetous
