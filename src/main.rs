@@ -165,7 +165,7 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
     }
 
     // check if we should simulate a logical merge conflict with this pull request
-    if last_pr + 1 % config.pullrequest.logical_conflict_every != 0 {
+    if (last_pr + 1 % config.pullrequest.logical_conflict_every) != 0 {
         println!("logical conflict not needed for this pr {}", last_pr + 1);
         return false;
     }
