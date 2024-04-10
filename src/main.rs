@@ -21,7 +21,7 @@ use walkdir::WalkDir;
 
 fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     let mut path = std::env::current_dir()?;
-    path.push(config.pullrequest.dep_path.to_owned());
+    path.push(config.pullrequest.change_code_path.to_owned());
     let mut paths = Vec::new();
     for entry in WalkDir::new(&path) {
         let entry = entry?;
@@ -335,7 +335,7 @@ fn run() -> anyhow::Result<()> {
 
     for _ in 0..pull_requests_to_make {
         let start = Instant::now();
-        let files = get_txt_files()?;
+        let files = get_txt_files(&config)?;
         let mut filenames: Vec<String> = files
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned())
