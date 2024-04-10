@@ -217,15 +217,15 @@ fn create_pull_request(
     dry_run: bool,
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
-
+    println!("mayt");
     let current_branch = git(&["branch", "--show-current"]);
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-t", "-b", &branch_name]);
-
+    println!("may333t");
     let commit_msg = format!("Moving words {}", words.join(", "));
     git(&["commit", "-am", &commit_msg]);
-
+    println!("may352353t");
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
         if result.is_err() {
