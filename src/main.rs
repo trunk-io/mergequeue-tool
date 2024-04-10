@@ -218,7 +218,7 @@ fn create_pull_request(
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
-    let current_branch = git(&["branch", "--show-current"]);
+    let current_branch = git(&["branch", "--show-current"]).trim();
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-t", "-b", &branch_name]);
