@@ -223,11 +223,14 @@ fn create_pull_request(
 
     let commit_msg = format!("Moving words {}", words.join(", "));
     git(&["commit", "-am", &commit_msg]);
-    let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
-    if result.is_err() {
-        git(&["checkout", "main"]);
-        git(&["pull"]);
-        return Err("could not push to origin".to_owned());
+
+    if !dry_run {
+        let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
+        if result.is_err() {
+            git(&["checkout", "main"]);
+            git(&["pull"]);
+            return Err("could not push to origin".to_owned());
+        }
     }
 
     let mut title = words.join(", ");
