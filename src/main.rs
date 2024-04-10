@@ -233,8 +233,6 @@ fn create_pull_request(
             git(&["pull"]);
             return Err("could not push to origin".to_owned());
         }
-    } else {
-        println!("skiping push to origin");
     }
 
     let mut title = words.join(", ");
@@ -257,7 +255,6 @@ fn create_pull_request(
     }
 
     if dry_run {
-        println!("finished");
         git(&["checkout", &current_branch]);
         git(&["pull"]);
         return Ok((last_pr + 1).to_string());
