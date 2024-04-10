@@ -224,7 +224,7 @@ fn create_pull_request(
     git(&["checkout", "-t", "-b", &branch_name]);
     println!("may333t");
     let commit_msg = format!("Moving words {}", words.join(", "));
-    git(&["commit", "-am", &commit_msg]);
+    git(&["commit", "--no-verify", "-am", &commit_msg]);
     println!("may352353t");
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
