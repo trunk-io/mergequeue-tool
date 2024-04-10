@@ -237,10 +237,13 @@ fn create_pull_request(
         println!("skiping push to origin");
     }
 
+    println!("q");
+
     let mut title = words.join(", ");
     if lc {
         title = format!("{} (logical-conflict)", title);
     }
+    println!("q");
     let mut args: Vec<&str> = vec![
         "pr",
         "create",
@@ -249,12 +252,12 @@ fn create_pull_request(
         "--body",
         &config.pullrequest.body,
     ];
-
+    println!("q");
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
         args.push(lbl.trim());
     }
-
+    println!("q");
     if dry_run {
         println!("finished");
         git(&["checkout", &current_branch]);
