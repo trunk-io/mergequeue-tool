@@ -12967,7 +12967,6 @@ anguineous
 anguinidae
 anguiped
 anguis
-anguish
 anguished
 anguishes
 antipriming
@@ -17847,6 +17846,7 @@ applosive
 applotment
 appmt
 appoggiatura
+anguish
 appoggiaturas
 appoggiature
 appointable
