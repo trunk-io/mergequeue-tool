@@ -218,6 +218,8 @@ fn create_pull_request(
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
+    let current_branch = git(&["branch", "--show-current"]);
+
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-t", "-b", &branch_name]);
 
@@ -227,10 +229,12 @@ fn create_pull_request(
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
         if result.is_err() {
-            git(&["checkout", "main"]);
+            git(&["checkout", &current_branch]);
             git(&["pull"]);
             return Err("could not push to origin".to_owned());
         }
+    } else {
+        println!("skiping push to origin");
     }
 
     let mut title = words.join(", ");
@@ -253,7 +257,7 @@ fn create_pull_request(
 
     if dry_run {
         // no matter what is result - need to reset checkout
-        git(&["checkout", "main"]);
+        git(&["checkout", &current_branch]);
         git(&["pull"]);
         return Ok((last_pr + 1).to_string());
     }
@@ -261,7 +265,7 @@ fn create_pull_request(
     let result = try_gh(args.as_slice());
 
     // no matter what is result - need to reset checkout
-    git(&["checkout", "main"]);
+    git(&["checkout", &current_branch]);
     git(&["pull"]);
 
     if result.is_err() {
