@@ -21,7 +21,7 @@ use walkdir::WalkDir;
 
 fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     let mut path = std::env::current_dir()?;
-    path.push(config.pullrequest.change_code_path.to_owned());
+    path.push(&config.pullrequest.change_code_path);
     let mut paths = Vec::new();
     for entry in WalkDir::new(&path) {
         let entry = entry?;
