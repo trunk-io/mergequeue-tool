@@ -19,9 +19,9 @@ use std::time::Duration;
 use std::time::Instant;
 use walkdir::WalkDir;
 
-fn get_txt_files() -> std::io::Result<Vec<PathBuf>> {
+fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     let mut path = std::env::current_dir()?;
-    path.push("bazel/");
+    path.push(config.pullrequest.dep_path.to_owned());
     let mut paths = Vec::new();
     for entry in WalkDir::new(&path) {
         let entry = entry?;
@@ -166,6 +166,7 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
 
     // check if we should simulate a logical merge conflict with this pull request
     if last_pr + 1 % config.pullrequest.logical_conflict_every != 0 {
+        println!("logical conflict not needed for this pr {}", last_pr + 1);
         return false;
     }
 
@@ -209,7 +210,12 @@ fn get_last_pr() -> u32 {
     }
 }
 
-fn create_pull_request(words: &[String], last_pr: u32, config: &Conf) -> Result<String, String> {
+fn create_pull_request(
+    words: &[String],
+    last_pr: u32,
+    config: &Conf,
+    dry_run: bool,
+) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
     let branch_name = format!("change/{}", words.join("-"));
@@ -240,6 +246,13 @@ fn create_pull_request(words: &[String], last_pr: u32, config: &Conf) -> Result<
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
         args.push(lbl.trim());
+    }
+
+    if dry_run {
+        // no matter what is result - need to reset checkout
+        git(&["checkout", "main"]);
+        git(&["pull"]);
+        return Ok((last_pr + 1).to_string());
     }
 
     let result = try_gh(args.as_slice());
@@ -316,6 +329,10 @@ fn run() -> anyhow::Result<()> {
 
     let mut prs: Vec<String> = Vec::new();
 
+    if cli.dry_run {
+        println!("dry-run set - no actual pull requests will be generated");
+    }
+
     for _ in 0..pull_requests_to_make {
         let start = Instant::now();
         let files = get_txt_files()?;
@@ -333,7 +350,7 @@ fn run() -> anyhow::Result<()> {
         let max_impacted_deps = config.pullrequest.max_impacted_deps as u32; // Convert usize to u32
         let words = change_file(&filenames, max_impacted_deps); // Use the converted value
 
-        let pr_result = create_pull_request(&words, last_pr, &config);
+        let pr_result = create_pull_request(&words, last_pr, &config, cli.dry_run);
         if pr_result.is_err() {
             println!("problem created pr for {:?}", words);
             continue;
