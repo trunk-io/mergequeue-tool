@@ -6339,6 +6339,7 @@ agoniatite
 agoniatites
 agonic
 agonied
+antrectomy
 agonies
 agonise
 agonised
@@ -16489,7 +16490,6 @@ antra
 antral
 antralgia
 antre
-antrectomy
 antres
 antrin
 antritis
