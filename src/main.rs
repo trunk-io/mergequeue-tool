@@ -217,15 +217,15 @@ fn create_pull_request(
     dry_run: bool,
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
-    println!("mayt");
+
     let current_branch = git(&["branch", "--show-current"]);
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-t", "-b", &branch_name]);
-    println!("may333t");
+
     let commit_msg = format!("Moving words {}", words.join(", "));
     git(&["commit", "--no-verify", "-am", &commit_msg]);
-    println!("may352353t");
+
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
         if result.is_err() {
@@ -237,13 +237,11 @@ fn create_pull_request(
         println!("skiping push to origin");
     }
 
-    println!("q");
-
     let mut title = words.join(", ");
     if lc {
         title = format!("{} (logical-conflict)", title);
     }
-    println!("q");
+
     let mut args: Vec<&str> = vec![
         "pr",
         "create",
@@ -252,12 +250,12 @@ fn create_pull_request(
         "--body",
         &config.pullrequest.body,
     ];
-    println!("q");
+
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
         args.push(lbl.trim());
     }
-    println!("q");
+
     if dry_run {
         println!("finished");
         git(&["checkout", &current_branch]);
