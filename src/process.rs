@@ -9,9 +9,15 @@ fn exec(cmd: &str, args: &[&str]) -> Result<String, String> {
     if !output.status.success() {
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         eprintln!("Call to {} {} failed", cmd, args.join(" "));
-        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+        return Err(String::from_utf8_lossy(&output.stderr)
+            .into_owned()
+            .trim()
+            .to_string());
     } else {
-        return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
+        return Ok(String::from_utf8_lossy(&output.stdout)
+            .into_owned()
+            .trim()
+            .to_string());
     }
 }
 

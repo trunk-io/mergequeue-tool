@@ -9,6 +9,10 @@ pub struct Cli {
     #[clap(long = "gh-token")]
     #[arg(default_value_t = String::from(""))]
     pub gh_token: String,
+
+    #[clap(long = "dry-run")]
+    #[arg(default_value_t = false)]
+    pub dry_run: bool,
 }
 
 #[derive(Subcommand, Debug)]

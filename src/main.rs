@@ -19,9 +19,9 @@ use std::time::Duration;
 use std::time::Instant;
 use walkdir::WalkDir;
 
-fn get_txt_files() -> std::io::Result<Vec<PathBuf>> {
+fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     let mut path = std::env::current_dir()?;
-    path.push("bazel/");
+    path.push(&config.pullrequest.change_code_path);
     let mut paths = Vec::new();
     for entry in WalkDir::new(&path) {
         let entry = entry?;
@@ -165,7 +165,7 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
     }
 
     // check if we should simulate a logical merge conflict with this pull request
-    if last_pr + 1 % config.pullrequest.logical_conflict_every != 0 {
+    if (last_pr + 1) % config.pullrequest.logical_conflict_every != 0 {
         return false;
     }
 
@@ -209,25 +209,36 @@ fn get_last_pr() -> u32 {
     }
 }
 
-fn create_pull_request(words: &[String], last_pr: u32, config: &Conf) -> Result<String, String> {
+fn create_pull_request(
+    words: &[String],
+    last_pr: u32,
+    config: &Conf,
+    dry_run: bool,
+) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
+
+    let current_branch = git(&["branch", "--show-current"]);
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-t", "-b", &branch_name]);
 
     let commit_msg = format!("Moving words {}", words.join(", "));
-    git(&["commit", "-am", &commit_msg]);
-    let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
-    if result.is_err() {
-        git(&["checkout", "main"]);
-        git(&["pull"]);
-        return Err("could not push to origin".to_owned());
+    git(&["commit", "--no-verify", "-am", &commit_msg]);
+
+    if !dry_run {
+        let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
+        if result.is_err() {
+            git(&["checkout", &current_branch]);
+            git(&["pull"]);
+            return Err("could not push to origin".to_owned());
+        }
     }
 
     let mut title = words.join(", ");
     if lc {
         title = format!("{} (logical-conflict)", title);
     }
+
     let mut args: Vec<&str> = vec![
         "pr",
         "create",
@@ -242,10 +253,16 @@ fn create_pull_request(words: &[String], last_pr: u32, config: &Conf) -> Result<
         args.push(lbl.trim());
     }
 
+    if dry_run {
+        git(&["checkout", &current_branch]);
+        git(&["pull"]);
+        return Ok((last_pr + 1).to_string());
+    }
+
     let result = try_gh(args.as_slice());
 
     // no matter what is result - need to reset checkout
-    git(&["checkout", "main"]);
+    git(&["checkout", &current_branch]);
     git(&["pull"]);
 
     if result.is_err() {
@@ -316,9 +333,13 @@ fn run() -> anyhow::Result<()> {
 
     let mut prs: Vec<String> = Vec::new();
 
+    if cli.dry_run {
+        println!("dry-run set - no actual pull requests will be generated");
+    }
+
     for _ in 0..pull_requests_to_make {
         let start = Instant::now();
-        let files = get_txt_files()?;
+        let files = get_txt_files(&config)?;
         let mut filenames: Vec<String> = files
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned())
@@ -333,7 +354,7 @@ fn run() -> anyhow::Result<()> {
         let max_impacted_deps = config.pullrequest.max_impacted_deps as u32; // Convert usize to u32
         let words = change_file(&filenames, max_impacted_deps); // Use the converted value
 
-        let pr_result = create_pull_request(&words, last_pr, &config);
+        let pr_result = create_pull_request(&words, last_pr, &config, cli.dry_run);
         if pr_result.is_err() {
             println!("problem created pr for {:?}", words);
             continue;

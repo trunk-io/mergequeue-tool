@@ -61,6 +61,9 @@ pub struct PullRequestConf {
     #[config(default = 10)]
     pub requests_per_hour: u32,
 
+    #[config(default = "bazel/")]
+    pub change_code_path: String,
+
     #[config(default = 1)]
     pub max_deps: usize,
 
