@@ -5387,7 +5387,6 @@ behalf
 behallow
 behalves
 behammer
-behang
 behap
 behatted
 behav
@@ -14174,6 +14173,7 @@ brad
 bradytelic
 bemadaming
 bradytocia
+behang
 bradytrophic
 bradyuria
 bradley
