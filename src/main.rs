@@ -12,6 +12,7 @@ use serde_json::to_string_pretty;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::env;
+
 use std::path::Path;
 use std::path::PathBuf;
 use std::thread;
@@ -239,14 +240,23 @@ fn create_pull_request(
         title = format!("{} (logical-conflict)", title);
     }
 
-    let mut args: Vec<&str> = vec![
-        "pr",
-        "create",
-        "--title",
-        &title,
-        "--body",
-        &config.pullrequest.body,
-    ];
+    let mut body = config.pullrequest.body.to_string();
+    body.push_str("\n[test]");
+    body.push_str(&format!("\nflake rate: {}", config.test.flake_rate));
+    body.push_str(&format!(
+        "\nlogical conflict every '{}' pull requests",
+        config.pullrequest.logical_conflict_every
+    ));
+    body.push_str(&format!(
+        "\nsleep for '{}' seconds",
+        config.sleep_duration().as_secs()
+    ));
+    body.push_str(&format!(
+        "\nPull requests per hour: {}",
+        config.pullrequest.requests_per_hour
+    ));
+
+    let mut args: Vec<&str> = vec!["pr", "create", "--title", &title, "--body", &body];
 
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
@@ -277,47 +287,7 @@ fn create_pull_request(
     Ok(pr_number.to_string())
 }
 
-fn run() -> anyhow::Result<()> {
-    let cli: Cli = Cli::parse();
-
-    if cli.subcommand.is_none() {
-        println!("Subcommand required. run 'mq help'");
-        return Ok(());
-    }
-
-    if let Some(Subcommands::Defaultconfig {}) = &cli.subcommand {
-        Conf::print_default();
-        return Ok(());
-    }
-
-    let config = Conf::builder()
-        .env()
-        .file("mq.toml")
-        .file(".config/mq.toml")
-        .load()
-        .unwrap_or_else(|err| {
-            eprintln!("Generator cannot run: {}", err);
-            std::process::exit(1);
-        });
-
-    if let Some(Subcommands::Housekeeping {}) = &cli.subcommand {
-        housekeeping(&config);
-        return Ok(());
-    }
-
-    if let Some(Subcommands::TestSim {}) = &cli.subcommand {
-        if !simulate_test(&config) {
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
-    if let Some(Subcommands::Config {}) = &cli.subcommand {
-        let config_json = to_string_pretty(&config).expect("Failed to serialize config to JSON");
-        println!("{}", config_json);
-        return Ok(());
-    }
-
+fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     if config.pullrequest.requests_per_hour == 0 {
         println!("generator is disabled pull requests per hour is set to 0");
         return Ok(());
@@ -371,6 +341,54 @@ fn run() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn run() -> anyhow::Result<()> {
+    let cli: Cli = Cli::parse();
+
+    if cli.subcommand.is_none() {
+        println!("Subcommand required. run 'mq help'");
+        return Ok(());
+    }
+
+    if let Some(Subcommands::Defaultconfig {}) = &cli.subcommand {
+        Conf::print_default();
+        return Ok(());
+    }
+
+    let config = Conf::builder()
+        .env()
+        .file("mq.toml")
+        .file(".config/mq.toml")
+        .load()
+        .unwrap_or_else(|err| {
+            eprintln!("Generator cannot run: {}", err);
+            std::process::exit(1);
+        });
+
+    match &cli.subcommand {
+        Some(Subcommands::Housekeeping {}) => {
+            housekeeping(&config);
+            Ok(())
+        }
+        Some(Subcommands::TestSim {}) => {
+            if !simulate_test(&config) {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Some(Subcommands::Config {}) => {
+            let config_json =
+                to_string_pretty(&config).expect("Failed to serialize config to JSON");
+            println!("{}", config_json);
+            Ok(())
+        }
+        Some(Subcommands::Generate {}) => generate(&config, &cli),
+        _ => {
+            // Handle other cases here
+            Err(anyhow::anyhow!("Subcommand not supported"))
+        }
+    }
 }
 
 fn main() {
