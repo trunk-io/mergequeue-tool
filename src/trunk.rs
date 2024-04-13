@@ -1,11 +1,12 @@
 use crate::cli::Cli;
+use crate::config::Conf;
 use crate::github::GitHubAction;
 use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
 use std::fs;
 
-pub fn upload_targets(cli: &Cli, github_json_path: &str) {
+pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
 
     let ga = GitHubAction::from_json(&github_json);
@@ -30,6 +31,7 @@ pub fn upload_targets(cli: &Cli, github_json_path: &str) {
         &ga.event.pull_request.head.sha,
         "main",
         impacted_targets,
+        &config.trunk.api,
         &cli.trunk_token,
     );
 
@@ -46,6 +48,7 @@ pub fn post_targets(
     pr_sha: &str,
     target_branch: &str,
     impacted_targets: Vec<String>,
+    api: &str,
     api_token: &str,
 ) -> Result<(), reqwest::Error> {
     let client = reqwest::blocking::Client::new();
@@ -69,7 +72,7 @@ pub fn post_targets(
     });
 
     let res = client
-        .post("https://api.trunk-staging.io:443/v1/setImpactedTargets")
+        .post(&format!("https://{}:443/v1/setImpactedTargets", api))
         .headers(headers)
         .body(body.to_string())
         .send();

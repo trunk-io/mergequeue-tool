@@ -307,7 +307,6 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     let dur = config.run_generate_for_duration();
     let hours = dur.as_secs() as f32 / 3600.0;
-    println!("runing for {} hours", hours);
 
     let pull_requests_to_make =
         (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
@@ -315,8 +314,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     let pull_request_every = (dur.as_secs() as f32 / pull_requests_to_make as f32).ceil() as u64;
 
     println!(
-        "make {} pull reuqweasrt every : {} seconds",
-        pull_requests_to_make, pull_request_every
+        "will generate pull request every {} seconds",
+        pull_request_every
     );
 
     // get the most recent PR to be created (used for creating logical merge conflicts)
@@ -411,7 +410,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Generate {}) => generate(&config, &cli),
         Some(Subcommands::UploadTargets(ut)) => {
             // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
-            upload_targets(&cli, &ut.github_json);
+            upload_targets(&config, &cli, &ut.github_json);
             Ok(())
         }
         _ => {

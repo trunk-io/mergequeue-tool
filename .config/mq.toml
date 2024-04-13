@@ -4,6 +4,9 @@
 # Default value: "none"
 #build = "none"
 
+[trunk]
+api = "api.trunk-staging.io"
+
 [git]
 # Default value: "Jane Doe"
 name = "Jane Doe"
@@ -27,7 +30,7 @@ requests_per_hour = 30
 run_generate_for = "1 hour"
 
 # Default value: "bazel/"
-change_code_path = "test/files/"
+change_code_path = "test/"
 
 # Default value: 1
 max_deps = 4

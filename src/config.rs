@@ -26,6 +26,9 @@ pub struct Conf {
     pub build: Build,
 
     #[config(nested)]
+    pub trunk: TrunkConf,
+
+    #[config(nested)]
     pub git: GitConf,
 
     #[config(nested)]
@@ -36,6 +39,12 @@ pub struct Conf {
 
     #[config(nested)]
     pub merge: MergeConf,
+}
+
+#[derive(Config, Serialize)]
+pub struct TrunkConf {
+    #[config(default = "api.trunk.io")]
+    pub api: String,
 }
 
 #[derive(Config, Serialize)]

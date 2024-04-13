@@ -19,12 +19,12 @@ jobs:
         with:
           tools: gh jq
 
-      #   - name: download mq
-      #     run: |
-      #       gh release download --pattern='*.gz' --output mq.gz --clobber
-      #       tar -xf mq.gz
-      #     env:
-      #       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: download mq
+        run: |
+          gh release download --pattern='*.gz' --output mq.gz --clobber
+          tar -xf mq.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build --release
         run: cargo build
@@ -40,15 +40,3 @@ jobs:
         env:
           TRUNK_TOKEN: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          #   - name: compute pr targets
-    #     uses: trunk-io/merge-action@v1
-    #     if:
-    #       steps.get-demo-config.outputs.mode != 'singlequeue' && steps.get-demo-config.outputs.build
-    #       == 'bazel'
-    #     with:
-    #       trunk-token: ${{ secrets.TRUNK_PROD_ORG_API_TOKEN }}
-    #       bazel-workspace-path: bazel
-    #       verbose: 1
-    #     env:
-    #       API_URL: https://api.trunk.io:443/v1/setImpactedTargets
