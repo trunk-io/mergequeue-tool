@@ -7046,6 +7046,7 @@ aitkenite
 aits
 aitutakian
 aphorizer
+aristocraticness
 ayu
 ayubite
 ayudante
@@ -19758,7 +19759,6 @@ aristocratically
 amphophilous
 aristocraticalness
 aristocraticism
-aristocraticness
 aristocratism
 aristocrats
 aristodemocracy

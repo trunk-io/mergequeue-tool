@@ -6390,7 +6390,6 @@ desaccharification
 desacralization
 desacralize
 drugshop
-desagrement
 desalinate
 desalinated
 desalinates
@@ -18591,6 +18590,7 @@ dutchess
 dutchy
 dutchify
 dutching
+desagrement
 dutchman
 dutchmen
 duteous
