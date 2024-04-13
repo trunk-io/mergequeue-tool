@@ -297,6 +297,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     let dur = config.run_generate_for_duration();
     let hours = dur.as_secs() as f32 / 3600.0;
+    println!("runing for {} hours", hours);
 
     let pull_requests_to_make =
         (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
