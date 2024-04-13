@@ -14779,6 +14779,7 @@ citess
 cithara
 citharas
 citharexylum
+cocciferous
 citharist
 citharista
 coprophiliac
@@ -17504,7 +17505,6 @@ coccidium
 coccidology
 circumflexion
 coccids
-cocciferous
 cocciform
 coccygalgia
 coccygeal
