@@ -1,5 +1,3 @@
-use std::env;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -33,7 +31,7 @@ pub fn read_env() {
     // let target_branch = env::var("TARGET_BRANCH").expect("Missing Repo params");
 
     let repo_parts: Vec<&str> = data.repository.split('/').collect();
-    let repo_owner = repo_parts.get(0).expect("Invalid REPOSITORY format");
+    let repo_owner = repo_parts.first().expect("Invalid REPOSITORY format");
     let repo_name = repo_parts.get(1).expect("Invalid REPOSITORY format");
 
     println!("REPO_OWNER: {}", repo_owner);

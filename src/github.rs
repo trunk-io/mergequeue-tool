@@ -45,10 +45,10 @@ impl GitHubAction {
 
     pub fn repo_owner(&self) -> &str {
         let repo_parts: Vec<&str> = self.repository.split('/').collect();
-        repo_parts.get(0).expect("Invalid REPOSITORY format")
+        repo_parts.first().unwrap_or(&"Invalid REPOSITORY format")
     }
     pub fn repo_name(&self) -> &str {
         let repo_parts: Vec<&str> = self.repository.split('/').collect();
-        repo_parts.get(1).expect("Invalid REPOSITORY format")
+        repo_parts.get(1).unwrap_or(&"Invalid REPOSITORY format")
     }
 }

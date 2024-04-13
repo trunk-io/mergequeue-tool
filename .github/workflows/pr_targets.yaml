@@ -32,7 +32,7 @@ jobs:
       - name: compute targets
         id: targes
         run: |
-          cargo run -- upload-targets  --github-json="${{ toJSON(github) }}"
+          cargo run -- upload-targets --github-json="${{ toJSON(github) }}"
         env:
           TRUNK_TOKEN: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
