@@ -302,10 +302,10 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     let pull_requests_to_make =
         (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
     // assuming that generating a pr doesn't take any time we will project to sleep every
-    let pull_request_every = (dur.as_secs() as f32 / pull_requests_to_make as f32).ceil();
+    let pull_request_every = (dur.as_secs() as f32 / pull_requests_to_make as f32).ceil() as u64;
 
     println!(
-        "make {} pull reuqweasrt very : {}",
+        "make {} pull reuqweasrt every : {} seconds",
         pull_requests_to_make, pull_request_every
     );
 
