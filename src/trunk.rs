@@ -77,8 +77,6 @@ pub fn post_targets(
         .body(body.to_string())
         .send();
 
-    println!("body: {:?}", body.to_string());
-
     println!("Response: {:?}", res);
 
     Ok(())
