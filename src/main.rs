@@ -397,8 +397,8 @@ fn run() -> anyhow::Result<()> {
         }
         Some(Subcommands::Generate {}) => generate(&config, &cli),
         Some(Subcommands::UploadTargets(ut)) => {
-            // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
-            upload_targets(&cli, &ut.github_json);
+            upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
+                                                                 // upload_targets(&cli, &ut.github_json);
             Ok(())
         }
         _ => {

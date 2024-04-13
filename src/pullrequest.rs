@@ -1,46 +1,3 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Github {
-    repository: String,
-    event: Event,
-}
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Event {
-    pub pull_request: PullRequest,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PullRequest {
-    pub number: u32,
-    pub head: Head,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Head {
-    pub sha: String,
-}
-
-pub fn read_env() {
-    let json = get_json();
-
-    let data: Github = serde_json::from_str(&json).unwrap();
-    println!("{:#?}", data);
-
-    // let repository = env::var("REPOSITORY").expect("Missing Repo params");
-    // let target_branch = env::var("TARGET_BRANCH").expect("Missing Repo params");
-
-    let repo_parts: Vec<&str> = data.repository.split('/').collect();
-    let repo_owner = repo_parts.first().expect("Invalid REPOSITORY format");
-    let repo_name = repo_parts.get(1).expect("Invalid REPOSITORY format");
-
-    println!("REPO_OWNER: {}", repo_owner);
-    println!("REPO_NAME: {}", repo_name);
-    // println!("TARGET_BRANCH: {}", target_branch);
-    println!("PR_NUMBER: {}", data.event.pull_request.number);
-    println!("PR_BRANCH_HEAD_SHA: {}", data.event.pull_request.head.sha);
-}
-
 pub fn get_json() -> String {
     let json = r#"{
     "token": "***",
@@ -87,7 +44,6 @@ pub fn get_json() -> String {
         "url": "https://api.github.com/orgs/trunk-io"
       },
       "pull_request": {
-       
         "active_lock_reason": null,
         "additions": 3,
         "assignee": null,
@@ -236,7 +192,7 @@ pub fn get_json() -> String {
             "url": "https://api.github.com/users/trunk-io"
           }
         },
-        "body": null,
+        "body": "hello",
         "changed_files": 1,
         "closed_at": null,
         "comments": 0,
