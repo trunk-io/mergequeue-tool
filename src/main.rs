@@ -342,9 +342,12 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         }
         let duration = start.elapsed();
         let pr = pr_result.unwrap();
-        println!("created pr: {} in {:?}", pr, duration);
-        // sleep between generation for
-        println!("sleeping between genreation for {}s", pull_request_every);
+        println!(
+            "created pr: {} in {:?} // waiting: {} mins",
+            pr,
+            duration,
+            (pull_request_every as f32 / 60.0)
+        );
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
         enqueue(&pr, config); // Change the argument type to accept a String
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
