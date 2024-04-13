@@ -2,9 +2,12 @@ use crate::cli::Cli;
 use crate::github::GitHubAction;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
+use std::fs;
 
-pub fn upload_targets(cli: &Cli, github_json: &str) {
-    let ga = GitHubAction::from_json(github_json);
+pub fn upload_targets(cli: &Cli, github_json_path: &str) {
+    let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
+
+    let ga = GitHubAction::from_json(&github_json);
     println!("{:#?}", ga);
 
     let result = post_targets(

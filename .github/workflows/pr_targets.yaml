@@ -31,7 +31,16 @@ jobs:
 
       - name: compute targets
         id: targes
-        run: cargo run -- upload-targets --github-json=${{ toJSON(github) }}
+        run: |
+          echo ""::group::GitHub Json"
+          TEMP_FILE=$(mktemp)
+          echo '${{ toJSON(github) }}' > $TEMP_FILE
+          echo ""::endgroup::""
+
+          cargo run -- upload-targets --github-json=$TEMP_FILE
+
+          echo "contents of file=========="
+          # cat $TEMP_FILE
         env:
           TRUNK_TOKEN: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
