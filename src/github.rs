@@ -41,10 +41,6 @@ pub struct Head {
 
 impl GitHubAction {
     pub fn from_json(json: &str) -> Self {
-        println!(
-            "Im going to print the json out now\n==========BEGIN\n{}\nEND",
-            json
-        );
         serde_json::from_str(json).unwrap()
     }
 

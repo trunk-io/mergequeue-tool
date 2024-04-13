@@ -253,6 +253,19 @@ fn create_pull_request(
         config.pullrequest.requests_per_hour
     ));
 
+    let mut first_letters: Vec<_> = words
+        .iter()
+        .map(|word| word.chars().next().unwrap().to_string())
+        .collect();
+
+    first_letters.sort();
+    first_letters.dedup();
+
+    body.push_str(&format!(
+        "\n\ndeps=[{}]\n",
+        first_letters.into_iter().collect::<Vec<_>>().join(",")
+    ));
+
     let mut args: Vec<&str> = vec!["pr", "create", "--title", &title, "--body", &body];
 
     for lbl in config.pullrequest.labels.split(',') {

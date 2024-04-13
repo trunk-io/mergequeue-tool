@@ -1,5 +1,6 @@
 use crate::cli::Cli;
 use crate::github::GitHubAction;
+use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
 use std::fs;
@@ -8,7 +9,19 @@ pub fn upload_targets(cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
 
     let ga = GitHubAction::from_json(&github_json);
-    println!("{:#?}", ga);
+    // println!("{:#?}", ga);
+
+    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
+
+    let mut impacted_targets: Vec<String> = Vec::new();
+    if let Some(caps) = re.captures(&ga.event.pull_request.body) {
+        impacted_targets = caps[1]
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect::<Vec<String>>();
+    } else {
+        println!("No deps listed in PR body like deps=[a,b,c]");
+    }
 
     let result = post_targets(
         ga.repo_owner(),
@@ -16,7 +29,7 @@ pub fn upload_targets(cli: &Cli, github_json_path: &str) {
         ga.event.pull_request.number,
         &ga.event.pull_request.head.sha,
         "main",
-        vec!["a".to_string(), "b".to_string()],
+        impacted_targets,
         &cli.trunk_token,
     );
 

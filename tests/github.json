@@ -191,7 +191,7 @@
           "url": "https://api.github.com/users/trunk-io"
         }
       },
-      "body": "hello",
+      "body": "hello\ndeps=[a,b]",
       "changed_files": 1,
       "closed_at": null,
       "comments": 0,
