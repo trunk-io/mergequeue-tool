@@ -304,6 +304,11 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     // assuming that generating a pr doesn't take any time we will project to sleep every
     let pull_request_every = dur.as_secs() / pull_requests_to_make as u64;
 
+    println!(
+        "make {} pull reuqweasrt very : {}",
+        pull_requests_to_make, pull_request_every
+    );
+
     // get the most recent PR to be created (used for creating logical merge conflicts)
     let mut last_pr = get_last_pr();
 
