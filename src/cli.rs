@@ -37,6 +37,7 @@ pub enum Subcommands {
 
 #[derive(Parser, Debug)]
 pub struct UploadTargets {
+    // Path to file that contains github-json block
     #[clap(long = "github-json")]
     pub github_json: String,
 }
