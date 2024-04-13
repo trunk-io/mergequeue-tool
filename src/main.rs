@@ -241,18 +241,18 @@ fn create_pull_request(
     }
 
     let mut body = config.pullrequest.body.to_string();
-    body.push_str("\n[test]");
+    body.push_str("\n\n[test]");
     body.push_str(&format!("\nflake rate: {}", config.test.flake_rate));
     body.push_str(&format!(
-        "\nlogical conflict every '{}' pull requests",
+        "\nlogical conflict every: {}",
         config.pullrequest.logical_conflict_every
     ));
     body.push_str(&format!(
-        "\nsleep for '{}' seconds",
+        "\nsleep for: {}s",
         config.sleep_duration().as_secs()
     ));
     body.push_str(&format!(
-        "\nPull requests per hour: {}",
+        "\n\n[pullrequest]\nrequests per hour: {}",
         config.pullrequest.requests_per_hour
     ));
 
