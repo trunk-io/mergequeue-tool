@@ -5,12 +5,14 @@ on: pull_request
 jobs:
   compute_pr_targets:
     name: compute
-    runs-on: ubicloud
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: truefilenames.sort();
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: trunk install
         uses: trunk-io/trunk-action/install@v1
