@@ -59,6 +59,7 @@ babblingly
 babblings
 babblish
 babblishly
+besaiel
 babbool
 babbools
 babcock
@@ -6877,7 +6878,6 @@ besnowed
 besa
 besagne
 besague
-besaiel
 besaile
 besayle
 besaint

@@ -7586,6 +7586,7 @@ amidist
 alcazaba
 alcazar
 alcazars
+anteroposteriorly
 alcazava
 alce
 alcedines
@@ -14292,7 +14293,6 @@ anterooms
 anteroparietal
 anteropygal
 anteroposterior
-anteroposteriorly
 anterospinal
 anterosuperior
 anteroventral
