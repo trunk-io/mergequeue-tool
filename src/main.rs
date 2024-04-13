@@ -295,8 +295,13 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     configure_git(&config);
 
-    // divide by 6 since we run once every 10 minutes
-    let pull_requests_to_make = (config.pullrequest.requests_per_hour as f32 / 6.0).ceil() as usize;
+    let dur = config.run_generate_for_duration();
+    let hours = dur.as_secs() as f32 / 3600.0;
+
+    let pull_requests_to_make =
+        (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
+    // assuming that generating a pr doesn't take any time we will project to sleep every
+    let pull_request_every = dur.as_secs() / pull_requests_to_make as u64;
 
     // get the most recent PR to be created (used for creating logical merge conflicts)
     let mut last_pr = get_last_pr();
@@ -332,12 +337,13 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let duration = start.elapsed();
         let pr = pr_result.unwrap();
         println!("created pr: {} in {:?}", pr, duration);
+        // sleep between generation for
+        println!("sleeping between genreation for {}s", pull_request_every);
+        thread::sleep(Duration::from_secs(pull_request_every) / 2);
+        enqueue(&pr, config); // Change the argument type to accept a String
+        thread::sleep(Duration::from_secs(pull_request_every) / 2);
         prs.push(pr);
         last_pr += 1;
-    }
-
-    for pr in &prs {
-        enqueue(pr, &config)
     }
 
     Ok(())

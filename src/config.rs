@@ -61,6 +61,11 @@ pub struct PullRequestConf {
     #[config(default = 1)]
     pub requests_per_hour: u32,
 
+    /// The desired length of time generate should run for attempting to
+    /// distribute the requests_per_hour over that time period
+    #[config(default = "10 minutes")]
+    pub run_generate_for: String,
+
     #[config(default = "bazel/")]
     pub change_code_path: String,
 
@@ -114,6 +119,11 @@ impl Conf {
     pub fn close_stale_after_duration(&self) -> std::time::Duration {
         parse(&self.pullrequest.close_stale_after)
             .expect("Failed to parse close_stale_after into a Duration")
+    }
+
+    pub fn run_generate_for_duration(&self) -> std::time::Duration {
+        parse(&self.pullrequest.run_generate_for)
+            .expect("Failed to parse run_generate_for into a Duration")
     }
 
     pub fn is_valid(&self) -> Result<(), &'static str> {
