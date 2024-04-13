@@ -32,7 +32,7 @@ jobs:
       - name: compute targets
         id: tar
         run: |
-          ./mq upload-targets
+          cargo run -- upload-targets
 
     #   - name: compute pr targets
     #     uses: trunk-io/merge-action@v1

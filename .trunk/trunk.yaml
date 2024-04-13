@@ -26,6 +26,7 @@ tools:
   enabled:
     - jq@jq-1.7.1
 lint:
+  disabled:
+    - rustfmt
   enabled:
-    - rustfmt@1.77.2
     - clippy@1.77.2
