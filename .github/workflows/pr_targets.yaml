@@ -34,10 +34,12 @@ jobs:
         run: |
           TEMP_FILE=$(mktemp)
           echo "${{ toJSON(github) }}" > $TEMP_FILE
-          cargo run -- upload-targets --github-json=$TEMP_FILE
+
+
+          cargo run -- upload-targets --github-json=${{ toJSON(github) }}
 
           echo "contents of file=========="
-          cat $TEMP_FILE
+          # cat $TEMP_FILE
         env:
           TRUNK_TOKEN: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
