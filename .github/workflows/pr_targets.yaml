@@ -33,7 +33,7 @@ jobs:
         id: targes
         run: |
           TEMP_FILE=$(mktemp)
-          echo "${{ toJSON(github) }}" > $TEMP_FILE
+          # echo "${{ toJSON(github) }}" > $TEMP_FILE
 
 
           cargo run -- upload-targets --github-json=${{ toJSON(github) }}
