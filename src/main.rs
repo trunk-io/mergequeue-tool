@@ -1,3 +1,8 @@
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use std::{env, thread};
+
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use confique::Config;
@@ -6,18 +11,10 @@ use gen::config::Conf;
 use gen::edit::change_file;
 use gen::github::GitHub;
 use gen::process::{gh, git, try_gh, try_git};
+use gen::pullrequest;
 use rand::Rng;
 use regex::Regex;
-use serde_json::to_string_pretty;
-use serde_json::Value;
-use std::collections::HashSet;
-use std::env;
-
-use std::path::Path;
-use std::path::PathBuf;
-use std::thread;
-use std::time::Duration;
-use std::time::Instant;
+use serde_json::{to_string_pretty, Value};
 use walkdir::WalkDir;
 
 fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
@@ -399,6 +396,10 @@ fn run() -> anyhow::Result<()> {
             Ok(())
         }
         Some(Subcommands::Generate {}) => generate(&config, &cli),
+        Some(Subcommands::UploadTargets {}) => {
+            pullrequest::read_env();
+            Ok(())
+        }
         _ => {
             // Handle other cases here
             Err(anyhow::anyhow!("Subcommand not supported"))

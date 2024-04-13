@@ -1,0 +1,45 @@
+name: Upload Impacted Targets
+run-name: pr targets for ${{ github.ref_name }}
+on: pull_request
+
+jobs:
+  compute_pr_targets:
+    name: compute
+    runs-on: ubicloud
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: truefilenames.sort();
+
+      - name: trunk install
+        uses: trunk-io/trunk-action/install@v1
+        with:
+          tools: gh jq
+
+      #   - name: download mq
+      #     run: |
+      #       gh release download --pattern='*.gz' --output mq.gz --clobber
+      #       tar -xf mq.gz
+      #     env:
+      #       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build --release
+        run: cargo build
+
+      - name: compute targets
+        id: tar
+        run: |
+          ./mq upload-targets
+
+    #   - name: compute pr targets
+    #     uses: trunk-io/merge-action@v1
+    #     if:
+    #       steps.get-demo-config.outputs.mode != 'singlequeue' && steps.get-demo-config.outputs.build
+    #       == 'bazel'
+    #     with:
+    #       trunk-token: ${{ secrets.TRUNK_PROD_ORG_API_TOKEN }}
+    #       bazel-workspace-path: bazel
+    #       verbose: 1
+    #     env:
+    #       API_URL: https://api.trunk.io:443/v1/setImpactedTargets

@@ -10,6 +10,10 @@ pub struct Cli {
     #[arg(default_value_t = String::from(""))]
     pub gh_token: String,
 
+    #[clap(long = "trunk-token")]
+    #[arg(default_value_t = String::from(""))]
+    pub trunk_token: String,
+
     #[clap(long = "dry-run")]
     #[arg(default_value_t = false)]
     pub dry_run: bool,
@@ -27,4 +31,6 @@ pub enum Subcommands {
     TestSim,
     /// Generate pull requests
     Generate,
+    /// upload targets
+    UploadTargets,
 }
