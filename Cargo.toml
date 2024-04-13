@@ -9,6 +9,7 @@ edition = "2021"
 [lib]
 name = "gen"
 path = "src/lib.rs"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.64"

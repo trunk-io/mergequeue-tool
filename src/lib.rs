@@ -4,4 +4,4 @@ pub mod edit;
 pub mod github;
 pub mod process;
 pub mod pullrequest;
-pub mod trunk;
+// pub mod trunk;

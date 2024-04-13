@@ -1,7 +1,7 @@
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
 
-fn upload_targets(
+async fn upload_targets(
     repo_owner: &str,
     repo_name: &str,
     pr_number: u32,
@@ -34,7 +34,8 @@ fn upload_targets(
         .post("https://api.trunk.io:443/v1/setImpactedTargets")
         .headers(headers)
         .body(body.to_string())
-        .send();
+        .send()
+        .await;
 
     println!("Response: {:?}", res);
 
