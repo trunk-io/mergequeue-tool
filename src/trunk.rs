@@ -1,7 +1,29 @@
+use crate::cli::Cli;
+use crate::github::GitHubAction;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
 
-async fn upload_targets(
+pub fn upload_targets(cli: &Cli, github_json: &str) {
+    let ga = GitHubAction::from_json(github_json);
+    println!("{:#?}", ga);
+
+    let result = post_targets(
+        ga.repo_owner(),
+        ga.repo_name(),
+        ga.event.pull_request.number,
+        &ga.event.pull_request.head.sha,
+        "main",
+        vec!["a".to_string(), "b".to_string()],
+        &cli.trunk_token,
+    );
+
+    match result {
+        Ok(()) => println!("Response: {:?}", "fe"),
+        Err(e) => eprintln!("Error: {:?}", e),
+    }
+}
+
+pub fn post_targets(
     repo_owner: &str,
     repo_name: &str,
     pr_number: u32,
@@ -10,7 +32,7 @@ async fn upload_targets(
     impacted_targets: Vec<String>,
     api_token: &str,
 ) -> Result<(), reqwest::Error> {
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
@@ -26,16 +48,17 @@ async fn upload_targets(
             "number": pr_number,
             "sha": pr_sha,
         },
-        "targetBranch": "main",
+        "targetBranch": target_branch,
         "impactedTargets": impacted_targets,
     });
 
     let res = client
-        .post("https://api.trunk.io:443/v1/setImpactedTargets")
+        .post("https://api.trunk-staging.io:443/v1/setImpactedTargets")
         .headers(headers)
         .body(body.to_string())
-        .send()
-        .await;
+        .send();
+
+    println!("body: {:?}", body.to_string());
 
     println!("Response: {:?}", res);
 

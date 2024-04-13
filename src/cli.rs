@@ -10,7 +10,7 @@ pub struct Cli {
     #[arg(default_value_t = String::from(""))]
     pub gh_token: String,
 
-    #[clap(long = "trunk-token")]
+    #[clap(long = "trunk-token", env = "TRUNK_TOKEN")]
     #[arg(default_value_t = String::from(""))]
     pub trunk_token: String,
 
@@ -32,5 +32,11 @@ pub enum Subcommands {
     /// Generate pull requests
     Generate,
     /// upload targets
-    UploadTargets,
+    UploadTargets(UploadTargets),
+}
+
+#[derive(Parser, Debug)]
+pub struct UploadTargets {
+    #[clap(long = "github-json")]
+    pub github_json: String,
 }

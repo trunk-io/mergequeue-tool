@@ -13,7 +13,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.64"
-clap = { version = "4.0.8", features = ["derive"] }
+clap = { version = "4.0.8", features = ["derive", "env"] }
 env_logger = "0.9.1"
 lazy_static = "1.4.0"
 log = "0.4.17"
@@ -26,4 +26,4 @@ walkdir = "2.5.0"
 parse_duration = "2.1.1"
 serde_json = "1.0.115"
 chrono = "0.4.37"
-reqwest = "0.12.3"
+reqwest = { version = "0.12.3", features = ["blocking"] }

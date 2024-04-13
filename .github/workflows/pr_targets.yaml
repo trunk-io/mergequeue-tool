@@ -30,10 +30,11 @@ jobs:
         run: cargo build
 
       - name: compute targets
-        id: tar
+        id: targes
         run: |
           cargo run -- upload-targets
-
+        env:
+          TRUNK_TOKEN: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
     #   - name: compute pr targets
     #     uses: trunk-io/merge-action@v1
     #     if:

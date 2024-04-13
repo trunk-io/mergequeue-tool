@@ -11,7 +11,7 @@ use gen::config::Conf;
 use gen::edit::change_file;
 use gen::github::GitHub;
 use gen::process::{gh, git, try_gh, try_git};
-use gen::pullrequest;
+use gen::trunk::upload_targets;
 use rand::Rng;
 use regex::Regex;
 use serde_json::{to_string_pretty, Value};
@@ -396,8 +396,9 @@ fn run() -> anyhow::Result<()> {
             Ok(())
         }
         Some(Subcommands::Generate {}) => generate(&config, &cli),
-        Some(Subcommands::UploadTargets {}) => {
-            pullrequest::read_env();
+        Some(Subcommands::UploadTargets(ut)) => {
+            // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
+            upload_targets(&cli, &ut.github_json);
             Ok(())
         }
         _ => {
