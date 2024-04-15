@@ -281,7 +281,6 @@ bacilliform
 bacilligenic
 bacilliparous
 bacillite
-bacillogenic
 bacillogenous
 bacillosis
 bacilluria
@@ -8797,6 +8796,7 @@ binal
 byname
 bynames
 binaphthyl
+bacillogenic
 binapthyl
 binary
 binaries

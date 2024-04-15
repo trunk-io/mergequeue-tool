@@ -2024,6 +2024,7 @@ apex
 acetifies
 acetifying
 acetyl
+amphidisc
 acetylacetonates
 acetylacetone
 acetylamine
@@ -11111,7 +11112,6 @@ amphidetic
 amphidiarthrosis
 amphidiploid
 amphidiploidy
-amphidisc
 amphidiscophora
 amphidiscophoran
 amphidisk

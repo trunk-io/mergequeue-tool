@@ -8344,7 +8344,6 @@ challengeful
 challenger
 challengers
 challenges
-challenging
 challengingly
 chally
 challie
@@ -9905,6 +9904,7 @@ chemosterilant
 chemosterilants
 chemosurgery
 chemosurgical
+challenging
 chemotactic
 chemotactically
 chemotaxy
