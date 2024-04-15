@@ -5846,7 +5846,6 @@ deprecation
 deprecations
 disconcert
 deprecative
-deprecatively
 deprecator
 deprecatory
 deprecatorily
@@ -9525,6 +9524,7 @@ dignities
 dignosle
 dignotion
 dygogram
+deprecatively
 digonal
 digoneutic
 digoneutism

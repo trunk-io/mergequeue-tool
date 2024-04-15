@@ -3874,6 +3874,7 @@ adiating
 adiation
 adib
 adibasi
+archivault
 adicea
 adicity
 adiel
@@ -19029,7 +19030,6 @@ architraved
 architraves
 architricline
 archival
-archivault
 archive
 archived
 archiver

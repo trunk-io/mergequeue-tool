@@ -12799,7 +12799,6 @@ chunkier
 chunkiest
 chunkily
 chunkiness
-chunking
 chunks
 chunner
 chunnia
@@ -28481,6 +28480,7 @@ creaturehood
 creatureless
 creaturely
 creatureliness
+chunking
 creatureling
 creatures
 creatureship

@@ -4655,6 +4655,7 @@ beden
 bedesman
 bedesmen
 bedeswoman
+beshroud
 bedeswomen
 bedeviling
 bedevilled
@@ -6982,7 +6983,6 @@ barreleye
 beshrews
 beshriek
 beshrivel
-beshroud
 borlase
 beshrouding
 beshrouds
