@@ -19,7 +19,7 @@ pub enum Build {
 
 #[derive(Config, Serialize)]
 pub struct Conf {
-    #[config(default = "parallelqueue")]
+    #[config(default = "singlequeue")]
     pub mode: Mode,
 
     #[config(default = "none")]

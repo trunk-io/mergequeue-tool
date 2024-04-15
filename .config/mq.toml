@@ -1,5 +1,5 @@
 # Default value: "singlequeue"
-mode = "parallelqueue"
+#mode = "singlequeue"
 
 # Default value: "none"
 #build = "none"

@@ -22,6 +22,10 @@ actions:
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
 
+lint:
+  enabled:
+    - clippy@1.77.2
+
 tools:
   enabled:
     - jq@jq-1.7.1
