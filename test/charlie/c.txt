@@ -6747,6 +6747,7 @@ cellose
 cells
 cellucotton
 cellular
+cheerier
 cellularity
 cellularly
 cellulase
@@ -9605,7 +9606,6 @@ cheerfullest
 cheerfully
 cheerfulness
 cheery
-cheerier
 cheeriest
 cheerily
 cheeriness
