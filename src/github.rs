@@ -31,7 +31,7 @@ pub struct Event {
 pub struct PullRequest {
     pub number: u32,
     pub head: Head,
-    pub body: String,
+    pub body: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
