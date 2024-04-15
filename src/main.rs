@@ -241,7 +241,7 @@ fn create_pull_request(
     body.push_str("\n\n[test]\n");
     body.push_str(&format!("flake rate: {}\n", config.test.flake_rate));
     body.push_str(&format!(
-        "\nlogical conflict every: {}",
+        "logical conflict every: {}\n",
         config.pullrequest.logical_conflict_every
     ));
     body.push_str(&format!(
