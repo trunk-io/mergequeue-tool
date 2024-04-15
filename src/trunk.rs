@@ -8,12 +8,17 @@ use std::fs;
 
 pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
-
     let ga = GitHubAction::from_json(&github_json);
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
 
+    if !&ga.event.pull_request.body.is_some() {
+        // no body content to pull deps from
+        return;
+    }
+
+    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
+    let body = ga.event.pull_request.body.clone().unwrap();
     let mut impacted_targets: Vec<String> = Vec::new();
-    if let Some(caps) = re.captures(&ga.event.pull_request.body) {
+    if let Some(caps) = re.captures(&body) {
         impacted_targets = caps[1]
             .split(',')
             .map(|s| s.trim().to_owned())
