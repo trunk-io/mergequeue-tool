@@ -399,10 +399,10 @@ fn run() -> anyhow::Result<()> {
             std::process::exit(1);
         });
 
-    if config.is_valid().is_err() {
-        eprintln!("Invalid configuration");
+    config.is_valid().unwrap_or_else(|err| {
+        eprintln!("Invalid configuration: {}", err);
         std::process::exit(1);
-    }
+    });
 
     match &cli.subcommand {
         Some(Subcommands::Housekeeping {}) => {
