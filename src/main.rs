@@ -309,8 +309,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     configure_git(&config);
 
-    let mut pull_requests_to_make: usize;
-    let mut pull_request_every: u64;
+    let pull_requests_to_make: usize;
+    let pull_request_every: u64;
 
     if config.pullrequest.requests_per_run > 0 {
         pull_requests_to_make = config.pullrequest.requests_per_run as usize;
