@@ -302,25 +302,30 @@ fn create_pull_request(
 }
 
 fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
-    if config.pullrequest.requests_per_hour == 0 {
+    if config.is_generator_disabled() {
         println!("generator is disabled pull requests per hour is set to 0");
         return Ok(());
     }
 
     configure_git(&config);
 
-    let dur = config.run_generate_for_duration();
-    let hours = dur.as_secs() as f32 / 3600.0;
+    let mut pull_requests_to_make = config.pullrequest.requests_per_run as usize;
+    let mut pull_request_every = 1;
 
-    let pull_requests_to_make =
-        (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
-    // assuming that generating a pr doesn't take any time we will project to sleep every
-    let pull_request_every = (dur.as_secs() as f32 / pull_requests_to_make as f32).ceil() as u64;
+    if config.pullrequest.requests_per_hour > 0 {
+        let dur = config.run_generate_for_duration();
+        let hours = dur.as_secs() as f32 / 3600.0;
 
-    println!(
-        "will generate pull request every {} seconds",
-        pull_request_every
-    );
+        pull_requests_to_make =
+            (config.pullrequest.requests_per_hour as f32 * hours).ceil() as usize;
+        // assuming that generating a pr doesn't take any time we will project to sleep every
+        pull_request_every = (dur.as_secs() as f32 / pull_requests_to_make as f32).ceil() as u64;
+
+        println!(
+            "will generate pull request every {} seconds",
+            pull_request_every
+        );
+    }
 
     // get the most recent PR to be created (used for creating logical merge conflicts)
     let mut last_pr = get_last_pr();
