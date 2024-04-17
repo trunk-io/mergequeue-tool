@@ -29,7 +29,7 @@ requests_per_hour = 30
 
 run_generate_for = "1 hour"
 
-requests_per_run = 0
+requests_per_run = 100
 
 # Default value: "bazel/"
 change_code_path = "test/"
