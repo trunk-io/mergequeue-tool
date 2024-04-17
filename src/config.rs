@@ -152,7 +152,7 @@ impl Conf {
         }
 
         if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
-            return Err("Cannot set both requests_per_hour and requests_per_run");
+            return Err("cannot set both requests_per_hour and requests_per_run");
         }
 
         Ok(())
