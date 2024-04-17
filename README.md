@@ -15,12 +15,33 @@ Commands:
   test-sim       Simulate a test with flake rate in consideration
   housekeeping   Clean out conflicting PRs and requeue failed PRs
   config         Print current configuration content to json
-  defaultconfig  Generate default configuration content for generator    
+  defaultconfig  Generate default configuration content
 
 Options:
       --gh-token <GH_TOKEN>  [default: ]
   -h, --help                 Print help
   -V, --version              Print version
+```
+
+#### Generate
+
+Running `mq generate` will attempt to generate pull requests at the configured rate. Generate can
+operate in two different modes. By setting the mutually exclusive requests_per_hour or
+requests_per_run value you are specifying to either run in either distributed mode which will try to
+distribute the generate load across the specified `run_generate_for` value or burst mode which will
+attempt to create pull requests as quickly as possible given the specified `requests_per_run` value.
+
+Burst Mode configuration to create 20 pull requests as quickly as possible
+
+```toml
+request_per_run: 20
+```
+
+Distributed Mode configuration to create 25 pull requests over 15 minutes time
+
+```toml
+requests_per_hour = 100
+run_generate_for = "15 minutes"
 ```
 
 #### Configuration
@@ -29,8 +50,8 @@ The load imparted onto the connected queue is controlled by the `mq.toml` file i
 folder.
 
 The configuration system allows for setting the desired load on the queue, the flake rate and the
-interdependence element of the pull requests. The tooling is designed to generate pull requests assuming 
-`mq generate` is called every 10 minutes. 
+interdependence element of the pull requests. The tooling is designed to generate pull requests
+assuming `mq generate` is called every 10 minutes.
 
 ```toml
 # parallelqueue - will push deps information to the service to take advantage of trunk merge dynamic parallel queues
