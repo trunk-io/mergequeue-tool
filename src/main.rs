@@ -400,7 +400,7 @@ fn run() -> anyhow::Result<()> {
         });
 
     config.is_valid().unwrap_or_else(|err| {
-        eprintln!("Invalid configuration: {}", err);
+        eprintln!("Invalid config:\n    {}", err);
         std::process::exit(1);
     });
 
