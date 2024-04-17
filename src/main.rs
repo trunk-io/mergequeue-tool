@@ -309,10 +309,18 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     configure_git(&config);
 
-    let mut pull_requests_to_make = config.pullrequest.requests_per_run as usize;
-    let mut pull_request_every = 1;
+    let mut pull_requests_to_make: usize;
+    let mut pull_request_every: u64;
 
-    if config.pullrequest.requests_per_hour > 0 {
+    if config.pullrequest.requests_per_run > 0 {
+        pull_requests_to_make = config.pullrequest.requests_per_run as usize;
+        pull_request_every = 1;
+
+        println!(
+            "will generate {} requests in burst mode",
+            pull_requests_to_make
+        );
+    } else {
         let dur = config.run_generate_for_duration();
         let hours = dur.as_secs() as f32 / 3600.0;
 
