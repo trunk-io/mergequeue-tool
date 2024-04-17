@@ -34,7 +34,7 @@ attempt to create pull requests as quickly as possible given the specified `requ
 Burst Mode configuration to create 20 pull requests as quickly as possible
 
 ```toml
-request_per_run: 20
+requests_per_run: 20
 ```
 
 Distributed Mode configuration to create 25 pull requests over 15 minutes time
