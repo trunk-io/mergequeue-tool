@@ -15,7 +15,7 @@ Commands:
   test-sim       Simulate a test with flake rate in consideration
   housekeeping   Clean out conflicting PRs and requeue failed PRs
   config         Print current configuration content to json
-  defaultconfig  Generate default configuration content for generator
+  defaultconfig  Generate default configuration content
 
 Options:
       --gh-token <GH_TOKEN>  [default: ]
