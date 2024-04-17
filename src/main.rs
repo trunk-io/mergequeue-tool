@@ -302,7 +302,7 @@ fn create_pull_request(
 }
 
 fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
-    if config.pullrequest.requests_per_hour == 0 {
+    if config.is_generator_disabled() {
         println!("generator is disabled pull requests per hour is set to 0");
         return Ok(());
     }

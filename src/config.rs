@@ -128,6 +128,10 @@ impl Conf {
         parse(&self.test.sleep_for).expect("Failed to parse sleep_for into a Duration")
     }
 
+    pub fn is_generator_disabled(&self) -> bool {
+        self.pullrequest.requests_per_hour == 0 && self.pullrequest.requests_per_run == 0
+    }
+
     pub fn close_stale_after_duration(&self) -> std::time::Duration {
         parse(&self.pullrequest.close_stale_after)
             .expect("Failed to parse close_stale_after into a Duration")
