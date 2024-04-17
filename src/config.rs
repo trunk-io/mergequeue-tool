@@ -75,6 +75,9 @@ pub struct PullRequestConf {
     #[config(default = "10 minutes")]
     pub run_generate_for: String,
 
+    #[config(default = 0)]
+    pub requests_per_run: u32,
+
     #[config(default = "bazel/")]
     pub change_code_path: String,
 
@@ -142,6 +145,12 @@ impl Conf {
 
         if parse(&self.test.sleep_for).is_err() {
             return Err("sleep_for must be a valid duration string");
+        }
+
+        if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
+            return Err(
+                "Cannot set both requests_per_hour and requests_per_run. Choose a generate mode",
+            );
         }
 
         Ok(())
