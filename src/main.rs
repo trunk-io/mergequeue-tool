@@ -125,7 +125,9 @@ fn enqueue(pr: &str, config: &Conf) {
         }
     }
     if !config.merge.run.is_empty() {
-        let result = run_cmd(&config.merge.run);
+        // perform token replacement for pr
+        let cmd = config.merge.run.replace("{{PR_NUMBER}}", pr);
+        let result = run_cmd(&cmd);
         println!("merge run results: {}", result);
     }
 }
