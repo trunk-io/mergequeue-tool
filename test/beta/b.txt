@@ -7098,7 +7098,6 @@ besotting
 besottingly
 besought
 besour
-besouth
 bespake
 bespangle
 bespangles
@@ -7239,6 +7238,7 @@ bestock
 bestore
 bestorm
 bestove
+besouth
 bestow
 bestowable
 bestowal
