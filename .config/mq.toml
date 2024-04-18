@@ -71,4 +71,4 @@ sleep_for = "1 second"
 #comment = "/trunk merge"
 
 # command to run to queue for merge
-#run = "gh pr merge {{PR_NUMBER}}"
+run = "gh pr merge {{PR_NUMBER}}"
