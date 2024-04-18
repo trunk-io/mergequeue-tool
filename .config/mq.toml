@@ -69,3 +69,6 @@ sleep_for = "1 second"
 
 # Default value: ""
 #comment = "/trunk merge"
+
+# command to run to queue for merge
+#run = "gh pr merge"

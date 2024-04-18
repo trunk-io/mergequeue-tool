@@ -21,6 +21,11 @@ fn exec(cmd: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+pub fn run_cmd(cmd: &str) -> String {
+    let args: Vec<&str> = cmd.split_whitespace().collect();
+    exec(args.first().unwrap(), &args[1..]).expect("run failed")
+}
+
 pub fn gh(args: &[&str]) -> String {
     exec("gh", args).expect("gh exec failed")
 }

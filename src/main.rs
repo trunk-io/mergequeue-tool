@@ -10,7 +10,7 @@ use gen::cli::{Cli, Subcommands};
 use gen::config::Conf;
 use gen::edit::change_file;
 use gen::github::GitHub;
-use gen::process::{gh, git, try_gh, try_git};
+use gen::process::{gh, git, run_cmd, try_gh, try_git};
 use gen::trunk::upload_targets;
 use rand::Rng;
 use regex::Regex;
@@ -123,6 +123,10 @@ fn enqueue(pr: &str, config: &Conf) {
         for lbl in &labels {
             GitHub::add_label(pr, lbl);
         }
+    }
+    if !config.merge.run.is_empty() {
+        let result = run_cmd(&config.merge.run);
+        println!("merge run results: {}", result);
     }
 }
 

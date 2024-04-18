@@ -116,6 +116,9 @@ pub struct MergeConf {
 
     #[config(default = "")]
     pub comment: String,
+
+    #[config(default = "")]
+    pub run: String,
 }
 
 impl Conf {
