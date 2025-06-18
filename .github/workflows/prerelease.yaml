@@ -14,7 +14,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runs-on: [ubuntu-latest]
+            runs-on: [ubuntu-22.04]
     runs-on: ${{ matrix.runs-on }}
 
     steps:
