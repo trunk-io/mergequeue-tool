@@ -14,7 +14,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runs-on: [ubuntu-20.04]
+            runs-on: [ubuntu-latest]
     runs-on: ${{ matrix.runs-on }}
 
     steps:
@@ -47,7 +47,7 @@ jobs:
 
   tag_and_release:
     name: Tag and Release [ ${{ github.event.inputs.release_tag }} ]
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-latest]
     needs: [build]
 
     steps:
