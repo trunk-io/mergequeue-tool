@@ -40,7 +40,7 @@ jobs:
         env:
           HORTON_RELEASE: ${{ github.event.inputs.release_tag }}
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: target/${{ matrix.target }}/release/mq
@@ -59,7 +59,7 @@ jobs:
           tools: gh
 
       - id: download
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: build
 
