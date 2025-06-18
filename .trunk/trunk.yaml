@@ -39,4 +39,5 @@ tools:
   runtimes:
     - rust
   enabled:
+    - gh@2.74.2
     - jq@jq-1.7.1
