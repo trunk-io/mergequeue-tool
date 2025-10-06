@@ -27,6 +27,18 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         println!("No deps listed in PR body like deps=[a,b,c]");
     }
 
+    // Validate that we have targets to upload
+    if impacted_targets.is_empty() {
+        println!("No impacted targets found - skipping upload");
+        return;
+    }
+
+    println!(
+        "Uploading {} impacted targets: {:?}",
+        impacted_targets.len(),
+        impacted_targets
+    );
+
     let result = post_targets(
         ga.repo_owner(),
         ga.repo_name(),
