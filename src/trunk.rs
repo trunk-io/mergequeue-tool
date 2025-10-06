@@ -103,22 +103,35 @@ pub fn post_targets(
             .text()
             .unwrap_or_else(|_| "Unable to read error response".to_string());
 
+        // Show debug info on errors
+        println!("API request failed:");
+        println!("  URL: https://{}:443/v1/setImpactedTargets", api);
+        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  PR Number: {}", pr_number);
+        println!("  Impacted Targets: {:?}", impacted_targets);
+
         match status.as_u16() {
+            400 => {
+                return Err(format!(
+                    "Bad Request (400): {}. Check request format and parameters.",
+                    error_body
+                )
+                .into())
+            }
             401 => {
                 return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
             }
             403 => return Err(format!("API key forbidden (403 Forbidden): {}", error_body).into()),
+            404 => {
+                return Err(
+                    format!("Pull request not found (404 Not Found): {}", error_body).into(),
+                )
+            }
             429 => {
                 return Err(format!("Rate limited (429 Too Many Requests): {}", error_body).into())
             }
             _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
         }
-    }
-
-    // Try to read response body for debugging
-    match res.text() {
-        Ok(response_text) => println!("API Response: {}", response_text),
-        Err(_) => println!("API call successful but couldn't read response body"),
     }
 
     Ok(())
