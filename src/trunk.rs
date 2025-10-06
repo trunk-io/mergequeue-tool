@@ -187,7 +187,11 @@ pub fn submit_pull_request(
     let url = format!("https://{}/v1/submitPullRequest", api);
     let body_str = body.to_string();
 
-    let res = client.post(&url).headers(headers).body(body_str).send()?;
+    let res = client
+        .post(&url)
+        .headers(headers)
+        .body(body_str.clone())
+        .send()?;
 
     // Check HTTP status code
     if !res.status().is_success() {
