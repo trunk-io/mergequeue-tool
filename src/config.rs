@@ -109,8 +109,20 @@ pub struct TestConf {
     pub sleep_for: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum EnqueueTrigger {
+    Comment, // post comment to PR to enqueue
+    Label,   // add a label to PR to enqueue
+    Run,     // run a command to enqueue PR i.e. - gh pr merge {{PR_NUMBER}}
+    Api,     // use Trunk API to enqueue PR
+}
+
 #[derive(Config, Serialize)]
 pub struct MergeConf {
+    #[config(default = "comment")]
+    pub trigger: EnqueueTrigger,
+
     #[config(default = "")]
     pub labels: String,
 
@@ -156,6 +168,29 @@ impl Conf {
 
         if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
             return Err("cannot set both requests_per_hour and requests_per_run");
+        }
+
+        // Validate merge trigger configuration
+        match self.merge.trigger {
+            EnqueueTrigger::Comment => {
+                if self.merge.comment.is_empty() {
+                    return Err("merge trigger is set to 'comment' but no comment is provided");
+                }
+            }
+            EnqueueTrigger::Label => {
+                if self.merge.labels.is_empty() {
+                    return Err("merge trigger is set to 'label' but no labels are provided");
+                }
+            }
+            EnqueueTrigger::Run => {
+                if self.merge.run.is_empty() {
+                    return Err("merge trigger is set to 'run' but no run command is provided");
+                }
+            }
+            EnqueueTrigger::Api => {
+                // For API trigger, we don't validate here as the token comes from CLI/env
+                // The actual validation happens at runtime when the API call is made
+            }
         }
 
         Ok(())

@@ -39,8 +39,12 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     );
 
     match result {
-        Ok(()) => println!("Response: {:?}", "fe"),
-        Err(e) => eprintln!("Error: {:?}", e),
+        Ok(_) => println!("Successfully uploaded impacted targets"),
+        Err(e) => {
+            eprintln!("Failed to upload impacted targets: {:?}", e);
+            // Exit with error code to fail the workflow
+            std::process::exit(1);
+        }
     }
 }
 
@@ -53,7 +57,7 @@ pub fn post_targets(
     impacted_targets: Vec<String>,
     api: &str,
     api_token: &str,
-) -> Result<(), reqwest::Error> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::new();
 
     let mut headers = HeaderMap::new();
@@ -78,9 +82,103 @@ pub fn post_targets(
         .post(&format!("https://{}:443/v1/setImpactedTargets", api))
         .headers(headers)
         .body(body.to_string())
-        .send();
+        .send()?;
 
-    println!("Response: {:?}", res);
+    // Check HTTP status code
+    if !res.status().is_success() {
+        let status = res.status();
+        let error_body = res
+            .text()
+            .unwrap_or_else(|_| "Unable to read error response".to_string());
+
+        match status.as_u16() {
+            401 => {
+                return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
+            }
+            403 => return Err(format!("API key forbidden (403 Forbidden): {}", error_body).into()),
+            429 => {
+                return Err(format!("Rate limited (429 Too Many Requests): {}", error_body).into())
+            }
+            _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
+        }
+    }
+
+    // Try to read response body for debugging
+    match res.text() {
+        Ok(response_text) => println!("API Response: {}", response_text),
+        Err(_) => println!("API call successful but couldn't read response body"),
+    }
+
+    Ok(())
+}
+
+pub fn submit_pull_request(
+    repo_owner: &str,
+    repo_name: &str,
+    pr_number: u32,
+    target_branch: &str,
+    priority: Option<&str>,
+    api: &str,
+    api_token: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::blocking::Client::new();
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+    headers.insert("x-api-token", api_token.parse().unwrap());
+
+    let mut body = json!({
+        "repo": {
+            "host": "github.com",
+            "owner": repo_owner,
+            "name": repo_name,
+        },
+        "pr": {
+            "number": pr_number,
+        },
+        "targetBranch": target_branch,
+    });
+
+    // Add priority if provided
+    if let Some(priority_value) = priority {
+        body["priority"] = json!(priority_value);
+    }
+
+    let res = client
+        .post(format!("https://{}:443/v1/submitPullRequest", api))
+        .headers(headers)
+        .body(body.to_string())
+        .send()?;
+
+    // Check HTTP status code
+    if !res.status().is_success() {
+        let status = res.status();
+        let error_body = res
+            .text()
+            .unwrap_or_else(|_| "Unable to read error response".to_string());
+
+        match status.as_u16() {
+            401 => {
+                return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
+            }
+            403 => return Err(format!("API key forbidden (403 Forbidden): {}", error_body).into()),
+            404 => {
+                return Err(
+                    format!("Pull request not found (404 Not Found): {}", error_body).into(),
+                )
+            }
+            429 => {
+                return Err(format!("Rate limited (429 Too Many Requests): {}", error_body).into())
+            }
+            _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
+        }
+    }
+
+    // Try to read response body for debugging
+    match res.text() {
+        Ok(response_text) => println!("Trunk API Response: {}", response_text),
+        Err(_) => println!("Trunk API call successful but couldn't read response body"),
+    }
 
     Ok(())
 }
