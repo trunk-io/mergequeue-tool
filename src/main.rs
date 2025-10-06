@@ -7,11 +7,11 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
-use gen::config::Conf;
+use gen::config::{Conf, EnqueueTrigger};
 use gen::edit::change_file;
 use gen::github::GitHub;
 use gen::process::{gh, git, run_cmd, try_gh, try_git};
-use gen::trunk::upload_targets;
+use gen::trunk::{submit_pull_request, upload_targets};
 use rand::Rng;
 use regex::Regex;
 use serde_json::{to_string_pretty, Value};
@@ -114,22 +114,77 @@ fn configure_git(config: &Conf) {
     git(&["config", "user.name", &config.git.name]);
 }
 
-fn enqueue(pr: &str, config: &Conf) {
-    if !config.merge.comment.is_empty() {
-        GitHub::comment(pr, &config.merge.comment);
+fn get_repo_info() -> Result<(String, String), String> {
+    let remote_url = git(&["config", "--get", "remote.origin.url"]);
+    let re = Regex::new(r"[:/]([^/]+)/([^/]+?)(?:\.git)?$").unwrap();
+
+    if let Some(caps) = re.captures(&remote_url) {
+        let owner = caps.get(1).map_or("", |m| m.as_str()).to_string();
+        let name = caps.get(2).map_or("", |m| m.as_str()).to_string();
+        Ok((owner, name))
+    } else {
+        Err("Could not parse repository owner and name from remote URL".to_string())
     }
-    if !config.merge.labels.is_empty() {
-        let labels: Vec<&str> = config.merge.labels.split(',').map(|s| s.trim()).collect();
-        for lbl in &labels {
-            GitHub::add_label(pr, lbl);
+}
+fn enqueue(pr: &str, config: &Conf, cli: &Cli) {
+    match config.merge.trigger {
+        EnqueueTrigger::Comment => {
+            if config.merge.comment.is_empty() {
+                eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
+                return;
+            }
+            GitHub::comment(pr, &config.merge.comment);
         }
-    }
-    if !config.merge.run.is_empty() {
-        // perform token replacement for pr
-        let cmd = config.merge.run.replace("{{PR_NUMBER}}", pr);
-        println!("run commd {}", cmd);
-        let result = run_cmd(&cmd);
-        println!("merge run results: {}", result);
+        EnqueueTrigger::Label => {
+            if config.merge.labels.is_empty() {
+                eprintln!("Cannot enqueue PR because merge 'trigger' is set to label but no labels were provided");
+                return;
+            }
+            let labels: Vec<&str> = config.merge.labels.split(',').map(|s| s.trim()).collect();
+            for lbl in &labels {
+                GitHub::add_label(pr, lbl);
+            }
+        }
+        EnqueueTrigger::Run => {
+            if config.merge.run.is_empty() {
+                eprintln!("Cannot enqueue PR because merge 'trigger' is set to run but no run command was provided");
+                return;
+            }
+            // perform token replacement for pr
+            let cmd = config.merge.run.replace("{{PR_NUMBER}}", pr);
+            println!("run commd {}", cmd);
+            let result = run_cmd(&cmd);
+            println!("merge run results: {}", result);
+        }
+
+        EnqueueTrigger::Api => {
+            match get_repo_info() {
+                Ok((owner, name)) => {
+                    let pr_number: u32 = match pr.parse() {
+                        Ok(num) => num,
+                        Err(_) => {
+                            eprintln!("Invalid PR number: {}", pr);
+                            return;
+                        }
+                    };
+                    match submit_pull_request(
+                        &owner,
+                        &name,
+                        pr_number,
+                        "main", // Default target branch, could be made configurable
+                        None,   // Default priority, could be made configurable
+                        &config.trunk.api,
+                        &cli.trunk_token,
+                    ) {
+                        Ok(_) => println!("Successfully submitted PR {} to Trunk merge queue", pr),
+                        Err(e) => {
+                            eprintln!("Failed to submit PR {} to Trunk merge queue: {:?}", pr, e)
+                        }
+                    }
+                }
+                Err(e) => eprintln!("Failed to get repository information: {}", e),
+            }
+        }
     }
 }
 
@@ -382,7 +437,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             (pull_request_every as f32 / 60.0)
         );
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
-        enqueue(&pr, config); // Change the argument type to accept a String
+        enqueue(&pr, config, cli); // Change the argument type to accept a String
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
         prs.push(pr);
         last_pr += 1;
