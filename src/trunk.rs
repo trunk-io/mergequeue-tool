@@ -11,7 +11,8 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let ga = GitHubAction::from_json(&github_json);
 
     if !&ga.event.pull_request.body.is_some() {
-        // no body content to pull deps from
+        println!("No PR body content found - skipping target upload");
+        println!("The PR body is required to extract dependency information using the format: deps=[target1,target2,target3]");
         return;
     }
 
