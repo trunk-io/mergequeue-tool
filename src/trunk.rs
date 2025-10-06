@@ -145,7 +145,7 @@ pub fn submit_pull_request(
     }
 
     let res = client
-        .post(&format!("https://{}:443/v1/submitPullRequest", api))
+        .post(format!("https://{}:443/v1/submitPullRequest", api))
         .headers(headers)
         .body(body.to_string())
         .send()?;
