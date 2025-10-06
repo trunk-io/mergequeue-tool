@@ -12,15 +12,18 @@ Usage: mq [OPTIONS] [COMMAND]
 
 Commands:
   generate       Generate pull requests
+  enqueue        Enqueue a specific pull request to the merge queue
   test-sim       Simulate a test with flake rate in consideration
   housekeeping   Clean out conflicting PRs and requeue failed PRs
   config         Print current configuration content to json
   defaultconfig  Generate default configuration content
 
 Options:
-      --gh-token <GH_TOKEN>  [default: ]
-  -h, --help                 Print help
-  -V, --version              Print version
+      --gh-token <GH_TOKEN>     [default: ]
+      --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
+      --dry-run                 Show what would be done without executing
+  -h, --help                    Print help
+  -V, --version                 Print version
 ```
 
 #### Generate
@@ -124,6 +127,9 @@ assuming `mq generate` is called every 10 minutes.
 #sleep_for = "1 second"
 
 [merge]
+# Default value: "comment"
+#trigger = "api"  # Options: "api", "run", "comment", "label"
+
 # Default value: ""
 #labels = ""
 

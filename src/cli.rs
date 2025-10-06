@@ -33,6 +33,8 @@ pub enum Subcommands {
     Generate,
     /// upload targets
     UploadTargets(UploadTargets),
+    /// Enqueue a pull request
+    Enqueue(Enqueue),
 }
 
 #[derive(Parser, Debug)]
@@ -40,4 +42,11 @@ pub struct UploadTargets {
     // Path to file that contains github-json block
     #[clap(long = "github-json")]
     pub github_json: String,
+}
+
+#[derive(Parser, Debug)]
+pub struct Enqueue {
+    /// Pull request number to enqueue
+    #[clap(short, long)]
+    pub pr: String,
 }

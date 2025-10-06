@@ -11,7 +11,8 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let ga = GitHubAction::from_json(&github_json);
 
     if !&ga.event.pull_request.body.is_some() {
-        // no body content to pull deps from
+        println!("No PR body content found - skipping target upload");
+        println!("The PR body is required to extract dependency information using the format: deps=[target1,target2,target3]");
         return;
     }
 
@@ -26,6 +27,18 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     } else {
         println!("No deps listed in PR body like deps=[a,b,c]");
     }
+
+    // Validate that we have targets to upload
+    if impacted_targets.is_empty() {
+        println!("No impacted targets found - skipping upload");
+        return;
+    }
+
+    println!(
+        "Uploading {} impacted targets: {:?}",
+        impacted_targets.len(),
+        impacted_targets
+    );
 
     let result = post_targets(
         ga.repo_owner(),
@@ -91,73 +104,21 @@ pub fn post_targets(
             .text()
             .unwrap_or_else(|_| "Unable to read error response".to_string());
 
-        match status.as_u16() {
-            401 => {
-                return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
-            }
-            403 => return Err(format!("API key forbidden (403 Forbidden): {}", error_body).into()),
-            429 => {
-                return Err(format!("Rate limited (429 Too Many Requests): {}", error_body).into())
-            }
-            _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
-        }
-    }
-
-    // Try to read response body for debugging
-    match res.text() {
-        Ok(response_text) => println!("API Response: {}", response_text),
-        Err(_) => println!("API call successful but couldn't read response body"),
-    }
-
-    Ok(())
-}
-
-pub fn submit_pull_request(
-    repo_owner: &str,
-    repo_name: &str,
-    pr_number: u32,
-    target_branch: &str,
-    priority: Option<&str>,
-    api: &str,
-    api_token: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let client = reqwest::blocking::Client::new();
-
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    headers.insert("x-api-token", api_token.parse().unwrap());
-
-    let mut body = json!({
-        "repo": {
-            "host": "github.com",
-            "owner": repo_owner,
-            "name": repo_name,
-        },
-        "pr": {
-            "number": pr_number,
-        },
-        "targetBranch": target_branch,
-    });
-
-    // Add priority if provided
-    if let Some(priority_value) = priority {
-        body["priority"] = json!(priority_value);
-    }
-
-    let res = client
-        .post(format!("https://{}:443/v1/submitPullRequest", api))
-        .headers(headers)
-        .body(body.to_string())
-        .send()?;
-
-    // Check HTTP status code
-    if !res.status().is_success() {
-        let status = res.status();
-        let error_body = res
-            .text()
-            .unwrap_or_else(|_| "Unable to read error response".to_string());
+        // Show debug info on errors
+        println!("API request failed:");
+        println!("  URL: https://{}:443/v1/setImpactedTargets", api);
+        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  PR Number: {}", pr_number);
+        println!("  Impacted Targets: {:?}", impacted_targets);
 
         match status.as_u16() {
+            400 => {
+                return Err(format!(
+                    "Bad Request (400): {}. Check request format and parameters.",
+                    error_body
+                )
+                .into())
+            }
             401 => {
                 return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
             }
@@ -174,10 +135,102 @@ pub fn submit_pull_request(
         }
     }
 
-    // Try to read response body for debugging
-    match res.text() {
-        Ok(response_text) => println!("Trunk API Response: {}", response_text),
-        Err(_) => println!("Trunk API call successful but couldn't read response body"),
+    Ok(())
+}
+
+pub fn submit_pull_request(
+    repo_owner: &str,
+    repo_name: &str,
+    pr_number: u32,
+    target_branch: &str,
+    priority: Option<&str>,
+    api: &str,
+    cli: &Cli,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Handle dry-run mode
+    if cli.dry_run {
+        println!("dry-run: would submit to Trunk API:");
+        println!("  - Repository: {}/{}", repo_owner, repo_name);
+        println!("  - PR Number: {}", pr_number);
+        println!("  - Target Branch: {}", target_branch);
+        if let Some(priority_value) = priority {
+            println!("  - Priority: {}", priority_value);
+        }
+        println!("  - API Endpoint: {}", api);
+        println!(
+            "  - Token: {}...",
+            &cli.trunk_token[..std::cmp::min(8, cli.trunk_token.len())]
+        );
+        return Ok(());
+    }
+    let client = reqwest::blocking::Client::new();
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+    headers.insert("x-api-token", cli.trunk_token.parse().unwrap());
+
+    let mut body = json!({
+        "repo": {
+            "host": "github.com",
+            "owner": repo_owner,
+            "name": repo_name,
+        },
+        "pr": {
+            "number": pr_number,
+        },
+        "targetBranch": target_branch,
+    });
+
+    // Add priority - use provided value or default to "medium"
+    let priority_value = priority.unwrap_or("medium");
+    body["priority"] = json!(priority_value);
+
+    let url = format!("https://{}/v1/submitPullRequest", api);
+    let body_str = body.to_string();
+
+    let res = client
+        .post(&url)
+        .headers(headers)
+        .body(body_str.clone())
+        .send()?;
+
+    // Check HTTP status code
+    if !res.status().is_success() {
+        let status = res.status();
+        let error_body = res
+            .text()
+            .unwrap_or_else(|_| "Unable to read error response".to_string());
+
+        // Show debug info only on errors
+        println!("API request failed:");
+        println!("  URL: {}", url);
+        println!("  Request body: {}", body_str);
+        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  PR Number: {}", pr_number);
+        println!("  Target Branch: {}", target_branch);
+
+        match status.as_u16() {
+            400 => {
+                return Err(format!(
+                    "Bad Request (400): {}. Check request format and parameters.",
+                    error_body
+                )
+                .into())
+            }
+            401 => {
+                return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
+            }
+            403 => return Err(format!("API key forbidden (403 Forbidden): {}", error_body).into()),
+            404 => {
+                return Err(
+                    format!("Pull request not found (404 Not Found): {}", error_body).into(),
+                )
+            }
+            429 => {
+                return Err(format!("Rate limited (429 Too Many Requests): {}", error_body).into())
+            }
+            _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
+        }
     }
 
     Ok(())

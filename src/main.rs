@@ -126,6 +126,7 @@ fn get_repo_info() -> Result<(String, String), String> {
         Err("Could not parse repository owner and name from remote URL".to_string())
     }
 }
+
 fn enqueue(pr: &str, config: &Conf, cli: &Cli) {
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
@@ -174,7 +175,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli) {
                         "main", // Default target branch, could be made configurable
                         None,   // Default priority, could be made configurable
                         &config.trunk.api,
-                        &cli.trunk_token,
+                        cli,
                     ) {
                         Ok(_) => println!("Successfully submitted PR {} to Trunk merge queue", pr),
                         Err(e) => {
@@ -495,6 +496,11 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::UploadTargets(ut)) => {
             // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
             upload_targets(&config, &cli, &ut.github_json);
+            Ok(())
+        }
+        Some(Subcommands::Enqueue(enqueue_args)) => {
+            println!("Enqueuing PR: {}", enqueue_args.pr);
+            enqueue(&enqueue_args.pr, &config, &cli);
             Ok(())
         }
         _ => {
