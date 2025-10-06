@@ -64,6 +64,9 @@ flake_rate = 0.1
 sleep_for = "1 second"
 
 [merge]
+# Default value: comment
+trigger = "api"
+
 # Default value: ""
 #labels = ""
 

@@ -119,13 +119,29 @@ pub fn submit_pull_request(
     target_branch: &str,
     priority: Option<&str>,
     api: &str,
-    api_token: &str,
+    cli: &Cli,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Handle dry-run mode
+    if cli.dry_run {
+        println!("dry-run: would submit to Trunk API:");
+        println!("  - Repository: {}/{}", repo_owner, repo_name);
+        println!("  - PR Number: {}", pr_number);
+        println!("  - Target Branch: {}", target_branch);
+        if let Some(priority_value) = priority {
+            println!("  - Priority: {}", priority_value);
+        }
+        println!("  - API Endpoint: {}", api);
+        println!(
+            "  - Token: {}...",
+            &cli.trunk_token[..std::cmp::min(8, cli.trunk_token.len())]
+        );
+        return Ok(());
+    }
     let client = reqwest::blocking::Client::new();
 
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-    headers.insert("x-api-token", api_token.parse().unwrap());
+    headers.insert("x-api-token", cli.trunk_token.parse().unwrap());
 
     let mut body = json!({
         "repo": {
@@ -139,16 +155,14 @@ pub fn submit_pull_request(
         "targetBranch": target_branch,
     });
 
-    // Add priority if provided
-    if let Some(priority_value) = priority {
-        body["priority"] = json!(priority_value);
-    }
+    // Add priority - use provided value or default to "medium"
+    let priority_value = priority.unwrap_or("medium");
+    body["priority"] = json!(priority_value);
 
-    let res = client
-        .post(format!("https://{}:443/v1/submitPullRequest", api))
-        .headers(headers)
-        .body(body.to_string())
-        .send()?;
+    let url = format!("https://{}/v1/submitPullRequest", api);
+    let body_str = body.to_string();
+
+    let res = client.post(&url).headers(headers).body(body_str).send()?;
 
     // Check HTTP status code
     if !res.status().is_success() {
@@ -157,7 +171,22 @@ pub fn submit_pull_request(
             .text()
             .unwrap_or_else(|_| "Unable to read error response".to_string());
 
+        // Show debug info only on errors
+        println!("API request failed:");
+        println!("  URL: {}", url);
+        println!("  Request body: {}", body_str);
+        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  PR Number: {}", pr_number);
+        println!("  Target Branch: {}", target_branch);
+
         match status.as_u16() {
+            400 => {
+                return Err(format!(
+                    "Bad Request (400): {}. Check request format and parameters.",
+                    error_body
+                )
+                .into())
+            }
             401 => {
                 return Err(format!("API key rejected (401 Unauthorized): {}", error_body).into())
             }
@@ -172,12 +201,6 @@ pub fn submit_pull_request(
             }
             _ => return Err(format!("HTTP error {}: {}", status, error_body).into()),
         }
-    }
-
-    // Try to read response body for debugging
-    match res.text() {
-        Ok(response_text) => println!("Trunk API Response: {}", response_text),
-        Err(_) => println!("Trunk API call successful but couldn't read response body"),
     }
 
     Ok(())
