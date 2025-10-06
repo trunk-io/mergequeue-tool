@@ -12,15 +12,18 @@ Usage: mq [OPTIONS] [COMMAND]
 
 Commands:
   generate       Generate pull requests
+  enqueue        Enqueue a specific pull request to the merge queue
   test-sim       Simulate a test with flake rate in consideration
   housekeeping   Clean out conflicting PRs and requeue failed PRs
   config         Print current configuration content to json
   defaultconfig  Generate default configuration content
 
 Options:
-      --gh-token <GH_TOKEN>  [default: ]
-  -h, --help                 Print help
-  -V, --version              Print version
+      --gh-token <GH_TOKEN>     [default: ]
+      --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
+      --dry-run                 Show what would be done without executing
+  -h, --help                    Print help
+  -V, --version                 Print version
 ```
 
 #### Generate
@@ -43,6 +46,58 @@ Distributed Mode configuration to create 25 pull requests over 15 minutes time
 requests_per_hour = 100
 run_generate_for = "15 minutes"
 ```
+
+#### Enqueue
+
+The `mq enqueue` command allows you to manually enqueue a specific pull request to the merge queue. This is useful for testing your merge configuration or enqueuing PRs that were created outside the tool.
+
+````bash
+# Enqueue a specific PR
+mq enqueue --pr 123
+
+The enqueue command respects your `merge.trigger` configuration and will execute the appropriate action based on your settings.
+
+#### Merge Triggers
+
+The tool supports multiple ways to trigger merges through the `merge.trigger` configuration:
+
+**API Trigger (Recommended)**
+```toml
+[merge]
+trigger = "api"
+````
+
+Uses the Trunk API to directly submit PRs to the merge queue. Requires a valid Trunk API token.
+
+**Run Command Trigger**
+
+```toml
+[merge]
+trigger = "run"
+run = "gh pr merge {{PR_NUMBER}}"
+```
+
+Executes a custom command for each PR. The `{{PR_NUMBER}}` token is replaced with the actual PR number.
+
+**Comment Trigger**
+
+```toml
+[merge]
+trigger = "comment"
+comment = "/trunk merge"
+```
+
+Posts a comment to each PR. Useful when you have a bot that responds to specific comments.
+
+**Label Trigger**
+
+```toml
+[merge]
+trigger = "label"
+labels = "ready-to-merge"
+```
+
+Adds labels to each PR. Useful when you have a bot that responds to specific labels.
 
 #### Configuration
 
@@ -124,6 +179,9 @@ assuming `mq generate` is called every 10 minutes.
 #sleep_for = "1 second"
 
 [merge]
+# Default value: "comment"
+#trigger = "api"  # Options: "api", "run", "comment", "label"
+
 # Default value: ""
 #labels = ""
 
