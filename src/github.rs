@@ -1,19 +1,19 @@
-use crate::process::gh;
+use crate::process::try_gh;
 use serde::{Deserialize, Serialize};
 
 pub struct GitHub;
 
 impl GitHub {
-    pub fn comment(pr: &str, body: &str) -> String {
-        gh(&["pr", "comment", pr, "--body", body])
+    pub fn comment(pr: &str, body: &str, token: &str) -> String {
+        try_gh(&["pr", "comment", pr, "--body", body], token).expect("Failed to comment on PR")
     }
 
-    pub fn close(pr: &str) -> String {
-        gh(&["pr", "close", pr])
+    pub fn close(pr: &str, token: &str) -> String {
+        try_gh(&["pr", "close", pr], token).expect("Failed to close PR")
     }
 
-    pub fn add_label(pr: &str, label: &str) -> String {
-        gh(&["pr", "edit", pr, "--add-label", label])
+    pub fn add_label(pr: &str, label: &str, token: &str) -> String {
+        try_gh(&["pr", "edit", pr, "--add-label", label], token).expect("Failed to add label to PR")
     }
 }
 
@@ -46,7 +46,7 @@ impl GitHubAction {
 
     pub fn repo_owner(&self) -> &str {
         let repo_parts: Vec<&str> = self.repository.split('/').collect();
-        repo_parts.get(0).expect("Invalid REPOSITORY format")
+        repo_parts.first().expect("Invalid REPOSITORY format")
     }
     pub fn repo_name(&self) -> &str {
         let repo_parts: Vec<&str> = self.repository.split('/').collect();

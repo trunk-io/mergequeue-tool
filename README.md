@@ -19,7 +19,7 @@ Commands:
   defaultconfig  Generate default configuration content
 
 Options:
-      --gh-token <GH_TOKEN>     GitHub token (can be specified multiple times)
+      --gh-token <GH_TOKEN>     GitHub token (can be specified multiple times, or use GH_TOKEN env var)
       --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
       --dry-run                 Show what would be done without executing
   -h, --help                    Print help
