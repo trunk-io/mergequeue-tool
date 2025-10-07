@@ -452,7 +452,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             continue;
         };
 
-        let pr_result = create_pull_request(&words, last_pr, &config, cli.dry_run, current_token);
+        let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
         if pr_result.is_err() {
             println!("problem created pr for {:?}", words);
             continue;
@@ -466,7 +466,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             (pull_request_every as f32 / 60.0)
         );
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
-        enqueue(&pr, &config, cli); // Change the argument type to accept a String
+        enqueue(&pr, config, cli); // Change the argument type to accept a String
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
         prs.push(pr);
         last_pr += 1;
