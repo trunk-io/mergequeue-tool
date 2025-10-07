@@ -47,20 +47,6 @@ requests_per_hour = 100
 run_generate_for = "15 minutes"
 ```
 
-#### Multiple GitHub Tokens
-
-The tool supports multiple GitHub tokens for scenarios where you need to authenticate with different GitHub accounts or organizations:
-
-```bash
-# Single token
-mq generate --gh-token YOUR_TOKEN
-
-# Multiple tokens
-mq generate --gh-token TOKEN1 --gh-token TOKEN2 --gh-token TOKEN3
-```
-
-The tokens are collected and can be used for different operations as needed.
-
 #### Configuration
 
 The load imparted onto the connected queue is controlled by the `mq.toml` file in the .config

@@ -7,15 +7,15 @@ pub struct Cli {
     pub subcommand: Option<Subcommands>,
 
     #[clap(long = "gh-token")]
-    #[arg(help = "GitHub token (can be specified multiple times)")]
+    #[arg(help = "GitHub token (can be specified multiple times)", global = true)]
     pub gh_token: Vec<String>,
 
     #[clap(long = "trunk-token", env = "TRUNK_TOKEN")]
-    #[arg(default_value_t = String::from(""))]
+    #[arg(default_value_t = String::from(""), global = true)]
     pub trunk_token: String,
 
     #[clap(long = "dry-run")]
-    #[arg(default_value_t = false)]
+    #[arg(default_value_t = false, global = true)]
     pub dry_run: bool,
 }
 
