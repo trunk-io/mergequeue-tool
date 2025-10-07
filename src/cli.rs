@@ -7,8 +7,8 @@ pub struct Cli {
     pub subcommand: Option<Subcommands>,
 
     #[clap(long = "gh-token")]
-    #[arg(default_value_t = String::from(""))]
-    pub gh_token: String,
+    #[arg(help = "GitHub token (can be specified multiple times)")]
+    pub gh_token: Vec<String>,
 
     #[clap(long = "trunk-token", env = "TRUNK_TOKEN")]
     #[arg(default_value_t = String::from(""))]
@@ -17,6 +17,13 @@ pub struct Cli {
     #[clap(long = "dry-run")]
     #[arg(default_value_t = false)]
     pub dry_run: bool,
+}
+
+impl Cli {
+    /// Get all GitHub tokens
+    pub fn get_github_tokens(&self) -> Vec<String> {
+        self.gh_token.clone()
+    }
 }
 
 #[derive(Subcommand, Debug)]

@@ -19,7 +19,7 @@ Commands:
   defaultconfig  Generate default configuration content
 
 Options:
-      --gh-token <GH_TOKEN>     [default: ]
+      --gh-token <GH_TOKEN>     GitHub token (can be specified multiple times)
       --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
       --dry-run                 Show what would be done without executing
   -h, --help                    Print help
@@ -46,6 +46,20 @@ Distributed Mode configuration to create 25 pull requests over 15 minutes time
 requests_per_hour = 100
 run_generate_for = "15 minutes"
 ```
+
+#### Multiple GitHub Tokens
+
+The tool supports multiple GitHub tokens for scenarios where you need to authenticate with different GitHub accounts or organizations:
+
+```bash
+# Single token
+mq generate --gh-token YOUR_TOKEN
+
+# Multiple tokens
+mq generate --gh-token TOKEN1 --gh-token TOKEN2 --gh-token TOKEN3
+```
+
+The tokens are collected and can be used for different operations as needed.
 
 #### Configuration
 

@@ -244,8 +244,8 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
     true
 }
 
-fn get_last_pr() -> u32 {
-    let result = try_gh(&["pr", "list", "--limit=1", "--json", "number"]);
+fn get_last_pr(gh_token: &str) -> u32 {
+    let result = try_gh(&["pr", "list", "--limit=1", "--json", "number"], gh_token);
     if result.is_err() {
         return 0;
     }
@@ -275,6 +275,7 @@ fn create_pull_request(
     last_pr: u32,
     config: &Conf,
     dry_run: bool,
+    gh_token: &str,
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
@@ -346,7 +347,7 @@ fn create_pull_request(
         return Ok((last_pr + 1).to_string());
     }
 
-    let result = try_gh(args.as_slice());
+    let result = try_gh(args.as_slice(), gh_token);
 
     // no matter what is result - need to reset checkout
     git(&["checkout", &current_branch]);
@@ -399,12 +400,27 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     }
 
     // get the most recent PR to be created (used for creating logical merge conflicts)
-    let mut last_pr = get_last_pr();
+    let github_tokens = cli.get_github_tokens();
+    let first_token = if !github_tokens.is_empty() {
+        &github_tokens[0]
+    } else {
+        eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
+        return Ok(());
+    };
+    let mut last_pr = get_last_pr(first_token);
 
     let mut prs: Vec<String> = Vec::new();
+    let mut token_index = 0;
 
     if cli.dry_run {
         println!("dry-run set - no actual pull requests will be generated");
+    }
+
+    if !github_tokens.is_empty() {
+        println!(
+            "Using {} GitHub token(s) in round-robin fashion",
+            github_tokens.len()
+        );
     }
 
     for _ in 0..pull_requests_to_make {
@@ -424,7 +440,19 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let max_impacted_deps = config.pullrequest.max_impacted_deps as u32; // Convert usize to u32
         let words = change_file(&filenames, max_impacted_deps); // Use the converted value
 
-        let pr_result = create_pull_request(&words, last_pr, &config, cli.dry_run);
+        // Select token for this PR (round-robin)
+        let current_token = if !github_tokens.is_empty() {
+            let token = &github_tokens[token_index % github_tokens.len()];
+            token_index += 1;
+            token.as_str()
+        } else {
+            // If no tokens provided, we need to handle this case
+            // For now, we'll require at least one token
+            eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
+            continue;
+        };
+
+        let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
         if pr_result.is_err() {
             println!("problem created pr for {:?}", words);
             continue;

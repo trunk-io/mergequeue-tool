@@ -30,8 +30,10 @@ pub fn gh(args: &[&str]) -> String {
     exec("gh", args).expect("gh exec failed")
 }
 
-pub fn try_gh(args: &[&str]) -> Result<String, String> {
-    exec("gh", args)
+pub fn try_gh(args: &[&str], token: &str) -> Result<String, String> {
+    let mut full_args = vec!["--token", token];
+    full_args.extend(args.iter());
+    exec("gh", &full_args)
 }
 
 pub fn git(args: &[&str]) -> String {
