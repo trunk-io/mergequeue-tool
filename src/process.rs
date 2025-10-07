@@ -1,10 +1,26 @@
 use std::process::Command;
 
 fn exec(cmd: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(cmd)
-        .args(args)
+    exec_with_env(cmd, args, None)
+}
+
+fn exec_with_env(
+    cmd: &str,
+    args: &[&str],
+    env_vars: Option<&[(&str, &str)]>,
+) -> Result<String, String> {
+    let mut command = Command::new(cmd);
+    command.args(args);
+
+    if let Some(envs) = env_vars {
+        for (key, value) in envs {
+            command.env(key, value);
+        }
+    }
+
+    let output = command
         .output()
-        .expect(&format!("Failed to execute {}", cmd));
+        .unwrap_or_else(|_| panic!("Failed to execute {}", cmd));
 
     if !output.status.success() {
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
@@ -26,14 +42,8 @@ pub fn run_cmd(cmd: &str) -> String {
     exec(args.first().unwrap(), &args[1..]).expect("run failed")
 }
 
-pub fn gh(args: &[&str]) -> String {
-    exec("gh", args).expect("gh exec failed")
-}
-
 pub fn try_gh(args: &[&str], token: &str) -> Result<String, String> {
-    let mut full_args = vec!["--token", token];
-    full_args.extend(args.iter());
-    exec("gh", &full_args)
+    exec_with_env("gh", args, Some(&[("GH_TOKEN", token)]))
 }
 
 pub fn git(args: &[&str]) -> String {

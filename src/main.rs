@@ -10,12 +10,22 @@ use gen::cli::{Cli, Subcommands};
 use gen::config::{Conf, EnqueueTrigger};
 use gen::edit::change_file;
 use gen::github::GitHub;
-use gen::process::{gh, git, run_cmd, try_gh, try_git};
+use gen::process::{git, run_cmd, try_gh, try_git};
 use gen::trunk::{submit_pull_request, upload_targets};
 use rand::Rng;
 use regex::Regex;
 use serde_json::{to_string_pretty, Value};
 use walkdir::WalkDir;
+
+/// Get the first GitHub token or exit with an error
+fn get_first_github_token(cli: &Cli) -> String {
+    let github_tokens = cli.get_github_tokens();
+    if github_tokens.is_empty() {
+        eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
+        std::process::exit(1);
+    }
+    github_tokens[0].clone()
+}
 
 fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     let mut path = std::env::current_dir()?;
@@ -32,15 +42,19 @@ fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-fn housekeeping(config: &Conf) {
+fn housekeeping(config: &Conf, gh_token: &str) {
     for _ in 0..3 {
-        let json_str = gh(&[
-            "pr",
-            "list",
-            "--limit=1000",
-            "--json",
-            "number,mergeable,comments",
-        ]);
+        let json_str = try_gh(
+            &[
+                "pr",
+                "list",
+                "--limit=1000",
+                "--json",
+                "number,mergeable,comments",
+            ],
+            gh_token,
+        )
+        .expect("Failed to list PRs");
         let v: Value = serde_json::from_str(&json_str).expect("Failed to parse JSON");
 
         let mut has_unknown = false;
@@ -54,7 +68,7 @@ fn housekeeping(config: &Conf) {
                         has_unknown = true;
                     }
                     "CONFLICTING" => {
-                        GitHub::close(&pr);
+                        GitHub::close(&pr, gh_token);
                         println!("closed pr: {} (had merge conflicts)", &pr);
                     }
                     "MERGEABLE" => {
@@ -85,8 +99,8 @@ fn housekeeping(config: &Conf) {
                                 .iter()
                                 .any(|s| body.contains(s))
                             {
-                                //enqueue(&pr, config);
-                                GitHub::close(&pr);
+                                //enqueue(&pr, config, cli, gh_token);
+                                GitHub::close(&pr, gh_token);
                                 println!("closed stale pr: {}", &pr);
                                 requeued.insert(pr.to_owned());
                             }
@@ -127,14 +141,14 @@ fn get_repo_info() -> Result<(String, String), String> {
     }
 }
 
-fn enqueue(pr: &str, config: &Conf, cli: &Cli) {
+fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
             if config.merge.comment.is_empty() {
                 eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
                 return;
             }
-            GitHub::comment(pr, &config.merge.comment);
+            GitHub::comment(pr, &config.merge.comment, gh_token);
         }
         EnqueueTrigger::Label => {
             if config.merge.labels.is_empty() {
@@ -143,7 +157,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli) {
             }
             let labels: Vec<&str> = config.merge.labels.split(',').map(|s| s.trim()).collect();
             for lbl in &labels {
-                GitHub::add_label(pr, lbl);
+                GitHub::add_label(pr, lbl, gh_token);
             }
         }
         EnqueueTrigger::Run => {
@@ -401,13 +415,11 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
     // get the most recent PR to be created (used for creating logical merge conflicts)
     let github_tokens = cli.get_github_tokens();
-    let first_token = if !github_tokens.is_empty() {
-        &github_tokens[0]
-    } else {
+    if github_tokens.is_empty() {
         eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
-        return Ok(());
-    };
-    let mut last_pr = get_last_pr(first_token);
+        std::process::exit(1);
+    }
+    let mut last_pr = get_last_pr(&github_tokens[0]);
 
     let mut prs: Vec<String> = Vec::new();
     let mut token_index = 0;
@@ -441,16 +453,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let words = change_file(&filenames, max_impacted_deps); // Use the converted value
 
         // Select token for this PR (round-robin)
-        let current_token = if !github_tokens.is_empty() {
-            let token = &github_tokens[token_index % github_tokens.len()];
-            token_index += 1;
-            token.as_str()
-        } else {
-            // If no tokens provided, we need to handle this case
-            // For now, we'll require at least one token
-            eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
-            continue;
-        };
+        let current_token = &github_tokens[token_index % github_tokens.len()];
+        token_index += 1;
 
         let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
         if pr_result.is_err() {
@@ -466,7 +470,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             (pull_request_every as f32 / 60.0)
         );
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
-        enqueue(&pr, config, cli); // Change the argument type to accept a String
+        enqueue(&pr, config, cli, current_token); // Change the argument type to accept a String
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
         prs.push(pr);
         last_pr += 1;
@@ -505,7 +509,8 @@ fn run() -> anyhow::Result<()> {
 
     match &cli.subcommand {
         Some(Subcommands::Housekeeping {}) => {
-            housekeeping(&config);
+            let token: String = get_first_github_token(&cli);
+            housekeeping(&config, &token);
             Ok(())
         }
         Some(Subcommands::TestSim {}) => {
@@ -528,7 +533,8 @@ fn run() -> anyhow::Result<()> {
         }
         Some(Subcommands::Enqueue(enqueue_args)) => {
             println!("Enqueuing PR: {}", enqueue_args.pr);
-            enqueue(&enqueue_args.pr, &config, &cli);
+            let token = get_first_github_token(&cli);
+            enqueue(&enqueue_args.pr, &config, &cli, &token);
             Ok(())
         }
         _ => {

@@ -20,9 +20,20 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Get all GitHub tokens
+    /// Get all GitHub tokens (from CLI args and environment variable)
     pub fn get_github_tokens(&self) -> Vec<String> {
-        self.gh_token.clone()
+        let mut tokens = self.gh_token.clone();
+
+        // Add GH_TOKEN from environment if no CLI tokens provided
+        if tokens.is_empty() {
+            if let Ok(env_token) = std::env::var("GH_TOKEN") {
+                if !env_token.is_empty() {
+                    tokens.push(env_token);
+                }
+            }
+        }
+
+        tokens
     }
 }
 
