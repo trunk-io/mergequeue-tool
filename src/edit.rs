@@ -1,3 +1,4 @@
+use crate::config::Conf;
 use rand::Rng;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
@@ -65,4 +66,22 @@ pub fn move_random_line(filename: &str) -> String {
     }
 
     word.to_lowercase().to_string()
+}
+
+/// Edit files for a PR based on the configuration and PR number.
+/// Returns the words that were changed in the files.
+pub fn edit_files_for_pr(filenames: &[String], pr_number: u32, config: &Conf) -> Vec<String> {
+    // Check if using new distribution approach or old approach
+    let (selected_files, change_count) = if config.pullrequest.dependency_distribution.is_some() {
+        // New approach: use all available files, change dependency_count lines
+        let dependency_count = config.get_dependency_count(pr_number, filenames.len());
+        (filenames.to_vec(), dependency_count)
+    } else {
+        // Old approach: limit files to max_deps, change max_impacted_deps lines
+        let max_files = config.pullrequest.max_deps.min(filenames.len());
+        let files: Vec<String> = filenames.iter().take(max_files).cloned().collect();
+        (files, config.pullrequest.max_impacted_deps)
+    };
+
+    change_file(&selected_files, change_count as u32)
 }

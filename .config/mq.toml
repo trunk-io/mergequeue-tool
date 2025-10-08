@@ -40,6 +40,12 @@ max_deps = 4
 # Default value: 1
 max_impacted_deps = 4
 
+# Distribution of dependency counts for PRs (deterministic based on PR number)
+# Format: "0.75x1,0.15x2,0.09x3,0.01xALL" means 75% get 1 dep, 15% get 2 deps, etc.
+# "ALL" means use all available dependencies
+# If not set, falls back to max_deps/max_impacted_deps behavior
+# dependency_distribution = "0.75x1,0.15x2,0.09x3,0.01xALL"
+
 # Default value: 100
 #logical_conflict_every = 100
 
