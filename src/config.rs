@@ -3,30 +3,20 @@ use confique::Config;
 use parse_duration::parse;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
+    #[default]
     SingleQueue,
     ParallelQueue,
 }
 
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::SingleQueue
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Build {
+    #[default]
     None,
     Bazel,
-}
-
-impl Default for Build {
-    fn default() -> Self {
-        Build::None
-    }
 }
 
 #[derive(Config, Serialize, Default)]
@@ -103,7 +93,7 @@ pub struct PullRequestConf {
     /// Format: "0.75x1,0.15x2,0.09x3,0.01xALL" means 75% get 1 dep, 15% get 2 deps, etc.
     /// "ALL" means use all available dependencies
     /// If not set, falls back to max_deps/max_impacted_deps behavior
-    pub dependency_distribution: Option<String>,
+    pub deps_distribution: Option<String>,
 
     #[config(default = 100)]
     pub logical_conflict_every: u32,
@@ -127,19 +117,14 @@ pub struct TestConf {
     pub sleep_for: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum EnqueueTrigger {
+    #[default]
     Comment, // post comment to PR to enqueue
-    Label,   // add a label to PR to enqueue
-    Run,     // run a command to enqueue PR i.e. - gh pr merge {{PR_NUMBER}}
-    Api,     // use Trunk API to enqueue PR
-}
-
-impl Default for EnqueueTrigger {
-    fn default() -> Self {
-        EnqueueTrigger::Comment
-    }
+    Label, // add a label to PR to enqueue
+    Run,   // run a command to enqueue PR i.e. - gh pr merge {{PR_NUMBER}}
+    Api,   // use Trunk API to enqueue PR
 }
 
 #[derive(Config, Serialize, Default)]
@@ -183,11 +168,11 @@ impl Conf {
 
     /// Parse the dependency distribution string and return a deterministic dependency count
     /// based on the PR number to ensure uniform distribution.
-    /// If dependency_distribution is not set, falls back to old max_impacted_deps behavior.
+    /// If deps_distribution is not set, falls back to old max_impacted_deps behavior.
     pub fn get_dependency_count(&self, pr_number: u32, total_available: usize) -> usize {
         // Check if using custom distribution
-        if let Some(ref distribution_str) = self.pullrequest.dependency_distribution {
-            let distribution = self.parse_dependency_distribution(distribution_str);
+        if let Some(ref distribution_str) = self.pullrequest.deps_distribution {
+            let distribution = self.parse_deps_distribution(distribution_str);
 
             // Create a uniform distribution by building a deterministic sequence
             let mut sequence = Vec::new();
@@ -201,6 +186,10 @@ impl Conf {
                 } else {
                     count.parse().unwrap_or(1)
                 };
+                println!(
+                    "DEBUG: prob={}, count={}, count_for_this_type={}, parsed_count={}",
+                    probability, count, count_for_this_type, parsed_count
+                );
                 for _ in 0..count_for_this_type {
                     sequence.push(parsed_count);
                 }
@@ -229,7 +218,12 @@ impl Conf {
 
             // Use PR number to index into the uniform sequence
             let pr_index = (pr_number - 1) % 1000; // Convert to 0-based index
-            return sequence[pr_index as usize];
+            let result = sequence[pr_index as usize];
+            println!(
+                "DEBUG: pr_number={}, pr_index={}, result={}",
+                pr_number, pr_index, result
+            );
+            return result;
         }
 
         // Fallback to old behavior: use max_impacted_deps, but limit by max_deps
@@ -238,7 +232,7 @@ impl Conf {
     }
 
     /// Parse the dependency distribution string into a vector of (probability, count) tuples
-    fn parse_dependency_distribution(&self, distribution_str: &str) -> Vec<(f64, String)> {
+    fn parse_deps_distribution(&self, distribution_str: &str) -> Vec<(f64, String)> {
         let mut result = Vec::new();
 
         for part in distribution_str.split(',') {
@@ -269,9 +263,9 @@ impl Conf {
     }
 
     /// Validate the dependency distribution string format and values
-    fn validate_dependency_distribution(&self, distribution_str: &str) -> Result<(), &'static str> {
+    fn validate_deps_distribution(&self, distribution_str: &str) -> Result<(), &'static str> {
         if distribution_str.trim().is_empty() {
-            return Err("dependency_distribution cannot be empty");
+            return Err("deps_distribution cannot be empty");
         }
 
         let mut total_probability = 0.0;
@@ -289,45 +283,44 @@ impl Conf {
 
                 // Validate probability
                 let probability = prob_str.parse::<f64>().map_err(|_| {
-                    "invalid probability format in dependency_distribution (must be a number)"
+                    "invalid probability format in deps_distribution (must be a number)"
                 })?;
 
                 if probability <= 0.0 {
-                    return Err("probabilities in dependency_distribution must be greater than 0");
+                    return Err("probabilities in deps_distribution must be greater than 0");
                 }
 
                 if probability > 1.0 {
-                    return Err(
-                        "probabilities in dependency_distribution cannot be greater than 1.0",
-                    );
+                    return Err("probabilities in deps_distribution cannot be greater than 1.0");
                 }
 
                 // Validate count
                 if count_str == "ALL" {
                     // "ALL" is valid
                 } else {
-                    let count = count_str.parse::<usize>()
-                        .map_err(|_| "invalid count format in dependency_distribution (must be a number or 'ALL')")?;
+                    let count = count_str.parse::<usize>().map_err(|_| {
+                        "invalid count format in deps_distribution (must be a number or 'ALL')"
+                    })?;
 
                     if count == 0 {
-                        return Err("count in dependency_distribution cannot be 0");
+                        return Err("count in deps_distribution cannot be 0");
                     }
                 }
 
                 total_probability += probability;
                 has_valid_entry = true;
             } else {
-                return Err("invalid format in dependency_distribution (expected 'probabilityxcount', e.g., '0.75x1')");
+                return Err("invalid format in deps_distribution (expected 'probabilityxcount', e.g., '0.75x1')");
             }
         }
 
         if !has_valid_entry {
-            return Err("dependency_distribution must contain at least one valid entry");
+            return Err("deps_distribution must contain at least one valid entry");
         }
 
         // Check if probabilities sum to approximately 1.0 (allow small floating point errors)
         if (total_probability - 1.0).abs() > 0.001 {
-            return Err("probabilities in dependency_distribution must sum to 1.0");
+            return Err("probabilities in deps_distribution must sum to 1.0");
         }
 
         Ok(())
@@ -347,10 +340,8 @@ impl Conf {
         }
 
         // Validate dependency distribution if set
-        if let Some(ref distribution_str) = self.pullrequest.dependency_distribution {
-            if let Err(e) = self.validate_dependency_distribution(distribution_str) {
-                return Err(e);
-            }
+        if let Some(ref distribution_str) = self.pullrequest.deps_distribution {
+            self.validate_deps_distribution(distribution_str)?;
         }
 
         // Validate merge trigger configuration

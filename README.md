@@ -107,6 +107,13 @@ assuming `mq generate` is called every 10 minutes.
 # Default value: 1
 #max_impacted_deps = 1
 
+# Distribution of dependency counts for PRs (deterministic based on PR number)
+# Format: "0.75x1,0.15x2,0.09x3,0.01xALL" means 75% get 1 dep, 15% get 2 deps, etc.
+# "ALL" means use all available dependencies.
+# The distribution is stable but shuffled so the occurence rate will be randomly distributed
+# If not set, falls back to max_deps/max_impacted_deps behavior
+# deps_distribution = "0.75x1,0.15x2,0.09x3,0.01xALL"
+
 # Default value: 100
 #logical_conflict_every = 100
 

@@ -20,7 +20,7 @@ fn create_test_config(pullrequest: PullRequestConf) -> Conf {
 #[test]
 fn test_deterministic_shuffle() {
     let config = create_test_config(PullRequestConf {
-        dependency_distribution: Some("0.5x1,0.3x2,0.2x3".to_string()),
+        deps_distribution: Some("0.5x1,0.3x2,0.2x3".to_string()),
         ..Default::default()
     });
 
@@ -53,9 +53,9 @@ fn test_deterministic_shuffle() {
 }
 
 #[test]
-fn test_dependency_distribution_uniform() {
+fn test_deps_distribution_uniform() {
     let config = create_test_config(PullRequestConf {
-        dependency_distribution: Some("0.5x1,0.3x2,0.2x3".to_string()),
+        deps_distribution: Some("0.5x1,0.3x2,0.2x3".to_string()),
         ..Default::default()
     });
 
@@ -137,7 +137,7 @@ fn test_fallback_to_old_behavior() {
     let config = create_test_config(PullRequestConf {
         max_deps: 5,
         max_impacted_deps: 3,
-        dependency_distribution: None, // Use old behavior
+        deps_distribution: None, // Use old behavior
         ..Default::default()
     });
 
@@ -157,14 +157,14 @@ fn test_edit_files_for_pr_logic() {
     let config_new = create_test_config(PullRequestConf {
         max_deps: 3,
         max_impacted_deps: 2,
-        dependency_distribution: Some("0.5x1,0.5x2".to_string()),
+        deps_distribution: Some("0.5x1,0.5x2".to_string()),
         ..Default::default()
     });
 
     let config_old = create_test_config(PullRequestConf {
         max_deps: 2,
         max_impacted_deps: 1,
-        dependency_distribution: None, // Use old behavior
+        deps_distribution: None, // Use old behavior
         ..Default::default()
     });
 
@@ -210,7 +210,7 @@ fn test_edit_files_for_pr_with_real_files() {
     let config = create_test_config(PullRequestConf {
         max_deps: 3,
         max_impacted_deps: 2,
-        dependency_distribution: Some("1.0x2".to_string()), // Always use 2 dependencies
+        deps_distribution: Some("1.0x2".to_string()), // Always use 2 dependencies
         ..Default::default()
     });
 
@@ -222,6 +222,11 @@ fn test_edit_files_for_pr_with_real_files() {
 
     // Test the actual file editing
     let words = edit_files_for_pr(&filenames, 1, &config);
+
+    // Debug: Check what dependency count we actually got
+    let dependency_count = config.get_dependency_count(1, filenames.len());
+    println!("Expected 2 dependencies, got {} for PR 1", dependency_count);
+    println!("Distribution: {:?}", config.pullrequest.deps_distribution);
 
     // Should return 2 words (based on distribution "1.0x2")
     assert_eq!(words.len(), 2);
@@ -236,7 +241,7 @@ fn test_edit_files_for_pr_with_real_files() {
 }
 
 #[test]
-fn test_dependency_distribution_validation() {
+fn test_deps_distribution_validation() {
     // Test valid distributions
     let valid_configs = vec![
         "1.0x1",
@@ -247,7 +252,7 @@ fn test_dependency_distribution_validation() {
 
     for distribution in valid_configs {
         let config = create_test_config(PullRequestConf {
-            dependency_distribution: Some(distribution.to_string()),
+            deps_distribution: Some(distribution.to_string()),
             ..Default::default()
         });
 
@@ -275,7 +280,7 @@ fn test_dependency_distribution_validation() {
 
     for (distribution, description) in invalid_configs {
         let config = create_test_config(PullRequestConf {
-            dependency_distribution: Some(distribution.to_string()),
+            deps_distribution: Some(distribution.to_string()),
             ..Default::default()
         });
 
@@ -289,14 +294,14 @@ fn test_dependency_distribution_validation() {
 }
 
 #[test]
-fn test_validate_dependency_distribution_directly() {
+fn test_validate_deps_distribution_directly() {
     // Test valid distributions directly
     let valid_distributions = vec!["1.0x1", "0.5x1,0.5x2", "0.75x1,0.15x2,0.09x3,0.01xALL"];
 
     for distribution in valid_distributions {
         // Create a config with just the dependency distribution set
         let config = create_test_config(PullRequestConf {
-            dependency_distribution: Some(distribution.to_string()),
+            deps_distribution: Some(distribution.to_string()),
             ..Default::default()
         });
 
@@ -313,7 +318,7 @@ fn test_validate_dependency_distribution_directly() {
 #[test]
 fn test_simple_distribution() {
     let config = create_test_config(PullRequestConf {
-        dependency_distribution: Some("1.0x2".to_string()),
+        deps_distribution: Some("1.0x2".to_string()),
         ..Default::default()
     });
 

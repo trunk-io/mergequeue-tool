@@ -1,27 +1,28 @@
 use crate::config::Conf;
 use rand::Rng;
-use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{BufRead, Write};
 use std::io::{BufReader, BufWriter};
 
 pub fn change_file(filenames: &[String], count: u32) -> Vec<String> {
     let mut rng = rand::thread_rng();
-    let mut unique_filenames: HashSet<String> = HashSet::new();
     let mut words: Vec<String> = Vec::new();
 
     if count > filenames.len() as u32 {
         panic!("The count must be less than the number of files");
     }
 
-    for _ in 0..count {
-        let idx = rng.gen_range(0..filenames.len());
-        let filename = &filenames[idx];
-        if unique_filenames.contains(filename) {
-            continue;
-        }
+    // Create a vector of indices and shuffle it to get unique random selections
+    let mut indices: Vec<usize> = (0..filenames.len()).collect();
+    for i in 0..count as usize {
+        let j = rng.gen_range(i..indices.len());
+        indices.swap(i, j);
+    }
+
+    // Take the first 'count' indices and process those files
+    for i in 0..count as usize {
+        let filename = &filenames[indices[i]];
         words.push(move_random_line(filename));
-        unique_filenames.insert(filename.to_string());
     }
 
     words
@@ -72,7 +73,7 @@ pub fn move_random_line(filename: &str) -> String {
 /// Returns the words that were changed in the files.
 pub fn edit_files_for_pr(filenames: &[String], pr_number: u32, config: &Conf) -> Vec<String> {
     // Check if using new distribution approach or old approach
-    let (selected_files, change_count) = if config.pullrequest.dependency_distribution.is_some() {
+    let (selected_files, change_count) = if config.pullrequest.deps_distribution.is_some() {
         // New approach: use all available files, change dependency_count lines
         let dependency_count = config.get_dependency_count(pr_number, filenames.len());
         (filenames.to_vec(), dependency_count)
