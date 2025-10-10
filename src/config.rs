@@ -3,21 +3,23 @@ use confique::Config;
 use parse_duration::parse;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
+    #[default]
     SingleQueue,
     ParallelQueue,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Build {
+    #[default]
     None,
     Bazel,
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct Conf {
     #[config(default = "singlequeue")]
     pub mode: Mode,
@@ -41,13 +43,13 @@ pub struct Conf {
     pub merge: MergeConf,
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct TrunkConf {
     #[config(default = "api.trunk.io")]
     pub api: String,
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct GitConf {
     #[config(default = "Jane Doe")]
     pub name: String,
@@ -56,7 +58,7 @@ pub struct GitConf {
     pub email: String,
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct PullRequestConf {
     #[config(default = "")]
     pub labels: String,
@@ -87,6 +89,12 @@ pub struct PullRequestConf {
     #[config(default = 1)]
     pub max_impacted_deps: usize,
 
+    /// Distribution of dependency counts for PRs
+    /// Format: "0.75x1,0.15x2,0.09x3,0.01xALL" means 75% get 1 dep, 15% get 2 deps, etc.
+    /// "ALL" means use all available dependencies
+    /// If not set, falls back to max_deps/max_impacted_deps behavior
+    pub deps_distribution: Option<String>,
+
     #[config(default = 100)]
     pub logical_conflict_every: u32,
 
@@ -100,7 +108,7 @@ pub struct PullRequestConf {
     pub close_stale_after: String,
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct TestConf {
     #[config(default = 0.1)]
     pub flake_rate: f32,
@@ -109,16 +117,17 @@ pub struct TestConf {
     pub sleep_for: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum EnqueueTrigger {
+    #[default]
     Comment, // post comment to PR to enqueue
-    Label,   // add a label to PR to enqueue
-    Run,     // run a command to enqueue PR i.e. - gh pr merge {{PR_NUMBER}}
-    Api,     // use Trunk API to enqueue PR
+    Label, // add a label to PR to enqueue
+    Run,   // run a command to enqueue PR i.e. - gh pr merge {{PR_NUMBER}}
+    Api,   // use Trunk API to enqueue PR
 }
 
-#[derive(Config, Serialize)]
+#[derive(Config, Serialize, Default)]
 pub struct MergeConf {
     #[config(default = "comment")]
     pub trigger: EnqueueTrigger,
@@ -157,6 +166,166 @@ impl Conf {
             .expect("Failed to parse run_generate_for into a Duration")
     }
 
+    /// Parse the dependency distribution string and return a deterministic dependency count
+    /// based on the PR number to ensure uniform distribution.
+    /// If deps_distribution is not set, falls back to old max_impacted_deps behavior.
+    pub fn get_dependency_count(&self, pr_number: u32, total_available: usize) -> usize {
+        // Check if using custom distribution
+        if let Some(ref distribution_str) = self.pullrequest.deps_distribution {
+            let distribution = self.parse_deps_distribution(distribution_str);
+
+            // Create a uniform distribution by building a deterministic sequence
+            let mut sequence = Vec::new();
+            let total_weight: f64 = distribution.iter().map(|(prob, _)| prob).sum();
+
+            // Build a sequence of 1000 items with the correct distribution
+            for (probability, count) in &distribution {
+                let count_for_this_type = ((probability / total_weight) * 1000.0).round() as usize;
+                let parsed_count = if count == "ALL" {
+                    total_available
+                } else {
+                    count.parse().unwrap_or(1)
+                };
+                println!(
+                    "DEBUG: prob={}, count={}, count_for_this_type={}, parsed_count={}",
+                    probability, count, count_for_this_type, parsed_count
+                );
+                for _ in 0..count_for_this_type {
+                    sequence.push(parsed_count);
+                }
+            }
+
+            // Pad or trim to exactly 1000 items
+            if sequence.len() < 1000 {
+                // Use the most common value as fallback, or 1 if no distribution
+                let fallback_value = if let Some((_, count)) = distribution.first() {
+                    if count == "ALL" {
+                        total_available
+                    } else {
+                        count.parse().unwrap_or(1)
+                    }
+                } else {
+                    1
+                };
+                while sequence.len() < 1000 {
+                    sequence.push(fallback_value);
+                }
+            }
+            sequence.truncate(1000);
+
+            // Shuffle the sequence deterministically to spread distribution evenly
+            self.deterministic_shuffle(&mut sequence);
+
+            // Use PR number to index into the uniform sequence
+            let pr_index = (pr_number - 1) % 1000; // Convert to 0-based index
+            let result = sequence[pr_index as usize];
+            println!(
+                "DEBUG: pr_number={}, pr_index={}, result={}",
+                pr_number, pr_index, result
+            );
+            return result;
+        }
+
+        // Fallback to old behavior: use max_impacted_deps, but limit by max_deps
+        let max_deps = self.pullrequest.max_deps.min(total_available);
+        self.pullrequest.max_impacted_deps.min(max_deps)
+    }
+
+    /// Parse the dependency distribution string into a vector of (probability, count) tuples
+    fn parse_deps_distribution(&self, distribution_str: &str) -> Vec<(f64, String)> {
+        let mut result = Vec::new();
+
+        for part in distribution_str.split(',') {
+            let part = part.trim();
+            if let Some((prob_str, count_str)) = part.split_once('x') {
+                if let Ok(probability) = prob_str.parse::<f64>() {
+                    result.push((probability, count_str.to_string()));
+                }
+            }
+        }
+
+        // Don't sort - keep the order as specified in the config
+        result
+    }
+
+    /// Deterministically shuffle a sequence using a simple algorithm
+    /// This ensures the same input always produces the same shuffled output
+    pub fn deterministic_shuffle(&self, sequence: &mut [usize]) {
+        let len = sequence.len();
+        for i in 0..len {
+            // Use a more complex deterministic "random" number based on position
+            // This ensures we actually get different positions for swapping
+            let pseudo_random = ((i * 7 + 13) * 17 + i * 3) % len;
+            if pseudo_random != i {
+                sequence.swap(i, pseudo_random);
+            }
+        }
+    }
+
+    /// Validate the dependency distribution string format and values
+    fn validate_deps_distribution(&self, distribution_str: &str) -> Result<(), &'static str> {
+        if distribution_str.trim().is_empty() {
+            return Err("deps_distribution cannot be empty");
+        }
+
+        let mut total_probability = 0.0;
+        let mut has_valid_entry = false;
+
+        for part in distribution_str.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+
+            if let Some((prob_str, count_str)) = part.split_once('x') {
+                let prob_str = prob_str.trim();
+                let count_str = count_str.trim();
+
+                // Validate probability
+                let probability = prob_str.parse::<f64>().map_err(|_| {
+                    "invalid probability format in deps_distribution (must be a number)"
+                })?;
+
+                if probability <= 0.0 {
+                    return Err("probabilities in deps_distribution must be greater than 0");
+                }
+
+                if probability > 1.0 {
+                    return Err("probabilities in deps_distribution cannot be greater than 1.0");
+                }
+
+                // Validate count
+                if count_str == "ALL" {
+                    // "ALL" is valid
+                } else {
+                    let count = count_str.parse::<usize>().map_err(|_| {
+                        "invalid count format in deps_distribution (must be a number or 'ALL')"
+                    })?;
+
+                    if count == 0 {
+                        return Err("count in deps_distribution cannot be 0");
+                    }
+                }
+
+                total_probability += probability;
+                has_valid_entry = true;
+            } else {
+                return Err("invalid format in deps_distribution (expected 'probabilityxcount', e.g., '0.75x1')");
+            }
+        }
+
+        if !has_valid_entry {
+            return Err("deps_distribution must contain at least one valid entry");
+        }
+
+        // Check if probabilities sum to approximately 1.0 (allow small floating point errors)
+        if (total_probability - 1.0).abs() > 0.001 {
+            return Err("probabilities in deps_distribution must sum to 1.0");
+        }
+
+        Ok(())
+    }
+
     pub fn is_valid(&self) -> Result<(), &'static str> {
         if self.test.flake_rate <= 0.0 || self.test.flake_rate > 1.0 {
             return Err("flake_rate must be between 0.0 and 1.0");
@@ -168,6 +337,11 @@ impl Conf {
 
         if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
             return Err("cannot set both requests_per_hour and requests_per_run");
+        }
+
+        // Validate dependency distribution if set
+        if let Some(ref distribution_str) = self.pullrequest.deps_distribution {
+            self.validate_deps_distribution(distribution_str)?;
         }
 
         // Validate merge trigger configuration

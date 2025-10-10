@@ -8,7 +8,7 @@ use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
 use gen::config::{Conf, EnqueueTrigger};
-use gen::edit::change_file;
+use gen::edit::edit_files_for_pr;
 use gen::github::GitHub;
 use gen::process::{git, run_cmd, try_gh, try_git};
 use gen::trunk::{submit_pull_request, upload_targets};
@@ -385,7 +385,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    configure_git(&config);
+    configure_git(config);
 
     let pull_requests_to_make: usize;
     let pull_request_every: u64;
@@ -422,7 +422,6 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     let mut last_pr = get_last_pr(&github_tokens[0]);
 
     let mut prs: Vec<String> = Vec::new();
-    let mut token_index = 0;
 
     if cli.dry_run {
         println!("dry-run set - no actual pull requests will be generated");
@@ -435,26 +434,22 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         );
     }
 
-    for _ in 0..pull_requests_to_make {
+    for token_index in 0..pull_requests_to_make {
         let start = Instant::now();
-        let files = get_txt_files(&config)?;
+        let files = get_txt_files(config)?;
         let mut filenames: Vec<String> = files
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned())
             .collect();
 
         filenames.sort();
-        let filenames: Vec<String> = filenames
-            .into_iter()
-            .take(config.pullrequest.max_deps)
-            .collect();
 
-        let max_impacted_deps = config.pullrequest.max_impacted_deps as u32; // Convert usize to u32
-        let words = change_file(&filenames, max_impacted_deps); // Use the converted value
+        // Use deterministic dependency count based on PR number
+        let next_pr_number = last_pr + 1;
+        let words = edit_files_for_pr(&filenames, next_pr_number, config);
 
         // Select token for this PR (round-robin)
         let current_token = &github_tokens[token_index % github_tokens.len()];
-        token_index += 1;
 
         let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
         if pr_result.is_err() {

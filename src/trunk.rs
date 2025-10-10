@@ -6,6 +6,62 @@ use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
 use std::fs;
 
+/// Extracts dependency targets from a PR body string.
+/// Looks for the pattern `deps=[target1,target2,target3]` and returns a vector of targets.
+/// Returns an empty vector if no deps pattern is found.
+pub fn get_targets(pr_body: &str) -> Vec<String> {
+    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
+
+    if let Some(caps) = re.captures(pr_body) {
+        caps[1]
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .collect::<Vec<String>>()
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_targets_basic() {
+        let body = "This is a test PR\ndeps=[a,b]\nMore content";
+        let targets = get_targets(body);
+        assert_eq!(targets, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_get_targets_with_spaces() {
+        let body = "deps=[ a , b , c ]";
+        let targets = get_targets(body);
+        assert_eq!(targets, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_get_targets_single() {
+        let body = "deps=[single-target]";
+        let targets = get_targets(body);
+        assert_eq!(targets, vec!["single-target"]);
+    }
+
+    #[test]
+    fn test_get_targets_empty() {
+        let body = "deps=[]";
+        let targets = get_targets(body);
+        assert_eq!(targets, vec![""]);
+    }
+
+    #[test]
+    fn test_get_targets_no_match() {
+        let body = "This PR has no deps information";
+        let targets = get_targets(body);
+        assert_eq!(targets, Vec::<String>::new());
+    }
+}
+
 pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
     let ga = GitHubAction::from_json(&github_json);
@@ -16,15 +72,10 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         return;
     }
 
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
     let body = ga.event.pull_request.body.clone().unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-    if let Some(caps) = re.captures(&body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    } else {
+    let impacted_targets = get_targets(&body);
+
+    if impacted_targets.is_empty() {
         println!("No deps listed in PR body like deps=[a,b,c]");
     }
 
