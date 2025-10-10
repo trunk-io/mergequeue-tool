@@ -38,12 +38,15 @@ jobs:
     permissions:
       checks: write # For trunk to post annotations
       contents: read # For repo checkout
+      pull-requests: write # For PR comments
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trunk Code Quality
         uses: trunk-io/trunk-action@v1
         with:
-          check-run-id: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
