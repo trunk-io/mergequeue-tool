@@ -1,5 +1,5 @@
 use gen::github::GitHubAction;
-use regex::Regex;
+use gen::trunk::get_targets;
 
 #[test]
 fn test_parse_deps_from_pr_body() {
@@ -25,16 +25,8 @@ fn test_parse_deps_from_pr_body() {
     let body = ga.event.pull_request.body.as_ref().unwrap();
     assert!(body.contains("deps=[a,b]"));
 
-    // Test the regex parsing logic (same as in src/trunk.rs)
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-
-    if let Some(caps) = re.captures(body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    }
+    // Test the actual get_targets function
+    let impacted_targets = get_targets(body);
 
     // Verify the extracted dependencies
     assert_eq!(impacted_targets.len(), 2);
@@ -61,15 +53,7 @@ fn test_parse_deps_with_spaces() {
     let ga = GitHubAction::from_json(github_json);
     let body = ga.event.pull_request.body.as_ref().unwrap();
 
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-
-    if let Some(caps) = re.captures(body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    }
+    let impacted_targets = get_targets(body);
 
     // Verify spaces are trimmed
     assert_eq!(impacted_targets.len(), 3);
@@ -97,15 +81,7 @@ fn test_parse_deps_single_dependency() {
     let ga = GitHubAction::from_json(github_json);
     let body = ga.event.pull_request.body.as_ref().unwrap();
 
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-
-    if let Some(caps) = re.captures(body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    }
+    let impacted_targets = get_targets(body);
 
     assert_eq!(impacted_targets.len(), 1);
     assert_eq!(impacted_targets[0], "single-target");
@@ -130,15 +106,7 @@ fn test_parse_deps_no_match() {
     let ga = GitHubAction::from_json(github_json);
     let body = ga.event.pull_request.body.as_ref().unwrap();
 
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-
-    if let Some(caps) = re.captures(body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    }
+    let impacted_targets = get_targets(body);
 
     // Should be empty when no match is found
     assert_eq!(impacted_targets.len(), 0);
@@ -163,15 +131,7 @@ fn test_parse_deps_empty_brackets() {
     let ga = GitHubAction::from_json(github_json);
     let body = ga.event.pull_request.body.as_ref().unwrap();
 
-    let re = Regex::new(r".*deps=\[(.*?)\].*").unwrap();
-    let mut impacted_targets: Vec<String> = Vec::new();
-
-    if let Some(caps) = re.captures(body) {
-        impacted_targets = caps[1]
-            .split(',')
-            .map(|s| s.trim().to_owned())
-            .collect::<Vec<String>>();
-    }
+    let impacted_targets = get_targets(body);
 
     // Should have one empty string when brackets are empty
     assert_eq!(impacted_targets.len(), 1);
