@@ -137,36 +137,3 @@ fn test_parse_deps_empty_brackets() {
     assert_eq!(impacted_targets.len(), 1);
     assert_eq!(impacted_targets[0], "");
 }
-
-#[test]
-fn test_api_trigger_trunk_token_validation() {
-    use gen::cli::Cli;
-    use gen::config::{Conf, EnqueueTrigger};
-
-    // Create a config with API trigger
-    let mut config = Conf::default();
-    config.merge.trigger = EnqueueTrigger::Api;
-    config.trunk.api = "api.trunk.io".to_string();
-
-    // Test with empty trunk token
-    let cli_empty_token = Cli {
-        subcommand: None,
-        gh_token: vec![],
-        trunk_token: String::new(), // Empty token
-        dry_run: false,
-    };
-
-    // Test with valid trunk token
-    let cli_valid_token = Cli {
-        subcommand: None,
-        gh_token: vec![],
-        trunk_token: "valid_token_123".to_string(),
-        dry_run: false,
-    };
-
-    // Verify empty token is detected
-    assert!(cli_empty_token.trunk_token.is_empty());
-
-    // Verify valid token is not empty
-    assert!(!cli_valid_token.trunk_token.is_empty());
-}

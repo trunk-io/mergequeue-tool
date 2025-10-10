@@ -256,7 +256,7 @@ fn test_deps_distribution_validation() {
             ..Default::default()
         });
 
-        let result = config.is_valid();
+        let result = config.is_valid(None);
         if let Err(e) = result {
             panic!(
                 "Valid distribution '{}' should pass validation, but got error: {}",
@@ -285,7 +285,7 @@ fn test_deps_distribution_validation() {
         });
 
         assert!(
-            config.is_valid().is_err(),
+            config.is_valid(None).is_err(),
             "Invalid distribution '{}' ({}) should fail validation",
             distribution,
             description
@@ -305,7 +305,7 @@ fn test_validate_deps_distribution_directly() {
             ..Default::default()
         });
 
-        let result = config.is_valid();
+        let result = config.is_valid(None);
         assert!(
             result.is_ok(),
             "Valid distribution '{}' should pass validation, but got error: {:?}",
@@ -327,4 +327,47 @@ fn test_simple_distribution() {
         let count = config.get_dependency_count(pr_num, 10);
         assert_eq!(count, 2, "PR {} should have 2 dependencies", pr_num);
     }
+}
+
+#[test]
+fn test_api_trigger_trunk_token_validation_in_config() {
+    use gen::cli::Cli;
+    use gen::config::EnqueueTrigger;
+
+    // Test with API trigger and empty token - should fail validation
+    let mut config = create_test_config(PullRequestConf::default());
+    config.merge.trigger = EnqueueTrigger::Api;
+
+    let cli_empty_token = Cli {
+        subcommand: None,
+        gh_token: vec![],
+        trunk_token: String::new(), // Empty token
+        dry_run: false,
+    };
+
+    let result = config.is_valid(Some(&cli_empty_token));
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err(),
+        "merge trigger is set to 'api' but TRUNK_TOKEN is not available"
+    );
+
+    // Test with API trigger and valid token - should pass validation
+    let cli_valid_token = Cli {
+        subcommand: None,
+        gh_token: vec![],
+        trunk_token: "valid_token_123".to_string(),
+        dry_run: false,
+    };
+
+    let result = config.is_valid(Some(&cli_valid_token));
+    assert!(result.is_ok());
+
+    // Test with API trigger but no CLI context - should fail validation
+    let result = config.is_valid(None);
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err(),
+        "merge trigger is set to 'api' but CLI context is required for token validation"
+    );
 }
