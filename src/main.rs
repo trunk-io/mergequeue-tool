@@ -497,7 +497,7 @@ fn run() -> anyhow::Result<()> {
             std::process::exit(1);
         });
 
-    config.is_valid().unwrap_or_else(|err| {
+    config.is_valid(Some(&cli)).unwrap_or_else(|err| {
         eprintln!("Invalid config:\n    {}", err);
         std::process::exit(1);
     });

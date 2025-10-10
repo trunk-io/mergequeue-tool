@@ -326,7 +326,7 @@ impl Conf {
         Ok(())
     }
 
-    pub fn is_valid(&self) -> Result<(), &'static str> {
+    pub fn is_valid(&self, cli: Option<&crate::cli::Cli>) -> Result<(), &'static str> {
         if self.test.flake_rate <= 0.0 || self.test.flake_rate > 1.0 {
             return Err("flake_rate must be between 0.0 and 1.0");
         }
@@ -362,8 +362,15 @@ impl Conf {
                 }
             }
             EnqueueTrigger::Api => {
-                // For API trigger, we don't validate here as the token comes from CLI/env
-                // The actual validation happens at runtime when the API call is made
+                if let Some(cli) = cli {
+                    if cli.trunk_token.is_empty() {
+                        return Err(
+                            "merge trigger is set to 'api' but TRUNK_TOKEN is not available",
+                        );
+                    }
+                } else {
+                    return Err("merge trigger is set to 'api' but CLI context is required for token validation");
+                }
             }
         }
 
