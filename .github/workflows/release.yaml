@@ -14,7 +14,14 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runs-on: [ubuntu-22.04]
+            runs-on: ubuntu-22.04
+            os: linux
+          - target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-22.04
+            os: linux
+          - target: aarch64-apple-darwin
+            runs-on: macos-14
+            os: macos
     runs-on: ${{ matrix.runs-on }}
 
     steps:
@@ -25,20 +32,25 @@ jobs:
       - name: Set up toolchains
         run: |
           rustup target add ${{ matrix.target }}
-          if [[ ${{ matrix.target }} == "aarch64-unknown-linux-gnu" ]]; then
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
             sudo apt update;
             sudo apt install -y binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu;
           fi
 
       - name: update version
-        run:
-          sed -i "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/"
-          Cargo.toml
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            sed -i '' "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/" Cargo.toml
+          else
+            sed -i "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/" Cargo.toml
+          fi
 
       - name: Build --release
         run: cargo build --release --target ${{ matrix.target }}
         env:
           HORTON_RELEASE: ${{ github.event.inputs.release_tag }}
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - uses: actions/upload-artifact@v4
         with:
@@ -68,9 +80,17 @@ jobs:
           for target in $(ls build)
           do
             chmod u+x build/${target}/mq
-            tar czvf \
-              build/mq-${{ github.event.inputs.release_tag }}-${target}.tar.gz \
-              -C build/${target} mq
+            if [[ "${target}" == *"apple-darwin"* ]]; then
+              # macOS binaries use zip format
+              cd build/${target}
+              zip ../mq-${{ github.event.inputs.release_tag }}-${target}.zip mq
+              cd ../..
+            else
+              # Linux binaries use tar.gz format
+              tar czvf \
+                build/mq-${{ github.event.inputs.release_tag }}-${target}.tar.gz \
+                -C build/${target} mq
+            fi
           done
 
       - name: Create GH release and upload binary
@@ -78,4 +98,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create --target ${{ github.ref }}  \
-            ${{ github.event.inputs.release_tag }} ./build/*.tar.gz --generate-notes
+            ${{ github.event.inputs.release_tag }} ./build/*.{tar.gz,zip} --generate-notes

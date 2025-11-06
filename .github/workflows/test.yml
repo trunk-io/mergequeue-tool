@@ -43,10 +43,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trunk Code Quality
         uses: trunk-io/trunk-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}

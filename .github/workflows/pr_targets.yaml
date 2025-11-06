@@ -2,6 +2,9 @@ name: Upload Impacted Targets
 run-name: pr targets for ${{ github.ref_name }}
 on: pull_request
 
+permissions:
+  contents: read
+
 jobs:
   compute_pr_targets:
     name: compute
@@ -10,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: truefilenames.sort();
+          lfs: true
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -19,10 +22,43 @@ jobs:
         with:
           tools: gh jq
 
-      - name: download mq
+      - name: Download mq binary
         run: |
-          gh release download --pattern='*.gz' --output mq.gz --clobber
-          tar -xf mq.gz
+          # Determine target triple based on runner OS and architecture
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "${{ runner.arch }}" == "X64" ]]; then
+              TARGET="x86_64-unknown-linux-gnu"
+              EXT="tar.gz"
+            elif [[ "${{ runner.arch }}" == "ARM64" ]]; then
+              TARGET="aarch64-unknown-linux-gnu"
+              EXT="tar.gz"
+            else
+              echo "Unsupported Linux architecture: ${{ runner.arch }}"
+              exit 1
+            fi
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "${{ runner.arch }}" == "ARM64" ]]; then
+              TARGET="aarch64-apple-darwin"
+              EXT="zip"
+            else
+              echo "Unsupported macOS architecture: ${{ runner.arch }} (only ARM64 is supported)"
+              exit 1
+            fi
+          else
+            echo "Unsupported OS: ${{ runner.os }}"
+            exit 1
+          fi
+
+          # Download and extract the binary
+          PATTERN="mq-*-${TARGET}.${EXT}"
+          gh release download --pattern="$PATTERN" --output "mq.${EXT}" --clobber
+
+          if [[ "$EXT" == "zip" ]]; then
+            unzip -o mq.zip
+          else
+            tar -xf mq.tar.gz
+          fi
+          chmod +x mq
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
