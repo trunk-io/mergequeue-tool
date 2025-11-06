@@ -49,6 +49,8 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         env:
           HORTON_RELEASE: ${{ github.event.inputs.release_tag }}
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - uses: actions/upload-artifact@v4
         with:
