@@ -37,14 +37,11 @@ jobs:
               exit 1
             fi
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            if [[ "${{ runner.arch }}" == "X64" ]]; then
-              TARGET="x86_64-apple-darwin"
-              EXT="zip"
-            elif [[ "${{ runner.arch }}" == "ARM64" ]]; then
+            if [[ "${{ runner.arch }}" == "ARM64" ]]; then
               TARGET="aarch64-apple-darwin"
               EXT="zip"
             else
-              echo "Unsupported macOS architecture: ${{ runner.arch }}"
+              echo "Unsupported macOS architecture: ${{ runner.arch }} (only ARM64 is supported)"
               exit 1
             fi
           else

@@ -19,9 +19,6 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runs-on: ubuntu-22.04
             os: linux
-          - target: x86_64-apple-darwin
-            runs-on: macos-14
-            os: macos
           - target: aarch64-apple-darwin
             runs-on: macos-14
             os: macos
@@ -41,9 +38,12 @@ jobs:
           fi
 
       - name: update version
-        run:
-          sed -i "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/"
-          Cargo.toml
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            sed -i '' "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/" Cargo.toml
+          else
+            sed -i "s/version = \"0.0.0\"/version = \"${{ github.event.inputs.release_tag }}\"/" Cargo.toml
+          fi
 
       - name: Build --release
         run: cargo build --release --target ${{ matrix.target }}
