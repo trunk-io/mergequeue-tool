@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.7.2
+      ref: v1.7.3
       uri: https://github.com/trunk-io/plugins
 
 runtimes:
@@ -24,7 +24,7 @@ lint:
   enabled:
     - actionlint@1.7.7
     - buildifier@8.2.1
-    - checkov@3.2.474
+    - checkov@3.2.477
     - git-diff-check
     - markdownlint@0.45.0
     - osv-scanner@2.2.3

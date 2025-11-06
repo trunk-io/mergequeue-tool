@@ -9858,6 +9858,7 @@ amatito
 acerata
 amative
 amatively
+arrondissements
 auricled
 amativeness
 amatol
@@ -20313,7 +20314,6 @@ arroyos
 arroyuelo
 arrondi
 arrondissement
-arrondissements
 arenarious
 arrope
 arrosion

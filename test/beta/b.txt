@@ -14744,6 +14744,7 @@ breacher
 breachers
 breaches
 breachful
+brises
 breachy
 breaching
 bread
@@ -15502,7 +15503,6 @@ briscola
 brise
 briseis
 brisement
-brises
 brisk
 brisked
 brisken

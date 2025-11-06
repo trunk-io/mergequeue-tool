@@ -29,8 +29,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run tests
-        run: cargo test --verbose
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest
+
+      - name: Run tests with JUnit output
+        run: |
+          NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1 cargo nextest run --message-format libtest-json > test-results.json
+          python3 convert_to_junit.py test-results.json junit.xml
+        env:
+          NEXTEST_EXPERIMENTAL_LIBTEST_JSON: 1
+
+      - name: Upload Test Results to Trunk.io
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: trunk-io/analytics-uploader@v1
+        with:
+          junit-paths: "junit.xml"
+          org-slug: trunk-staging-org
+          token: ${{ secrets.TRUNK_STAGING_ORG_API_TOKEN }}
 
   trunk_check:
     name: Trunk Code Quality

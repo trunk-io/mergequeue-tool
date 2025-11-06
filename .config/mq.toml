@@ -71,13 +71,13 @@ sleep_for = "1 second"
 
 [merge]
 # Default value: comment
-trigger = "api"
+trigger = "comment"
 
 # Default value: ""
 #labels = ""
 
 # Default value: ""
-#comment = "/trunk merge"
+comment = "/trunk merge"
 
 # command to run to queue for merge
 #run = "gh pr merge {{PR_NUMBER}}"

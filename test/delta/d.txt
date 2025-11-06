@@ -4360,6 +4360,7 @@ demandant
 demandative
 demanded
 demander
+discus
 demanders
 demanding
 demandingly
@@ -11783,7 +11784,6 @@ discursiveness
 discursory
 discursus
 discurtain
-discus
 discuses
 discussant
 discussed

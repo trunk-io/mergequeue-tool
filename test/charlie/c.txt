@@ -23709,6 +23709,7 @@ contrapletal
 contraplete
 contraplex
 contrapolarization
+crocodilite
 contrapone
 contraponend
 cloaks
@@ -29624,7 +29625,6 @@ crocodilidae
 cadmopone
 crocodylidae
 crocodiline
-crocodilite
 crocodility
 crocodiloid
 coriin
