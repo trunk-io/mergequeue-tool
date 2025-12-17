@@ -63,6 +63,13 @@ mod tests {
 }
 
 pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
+    // Check for TRUNK_TOKEN at runtime
+    if cli.trunk_token.is_empty() {
+        eprintln!("TRUNK_TOKEN is required for upload-targets subcommand");
+        eprintln!("Provide it via --trunk-token flag or TRUNK_TOKEN environment variable");
+        std::process::exit(1);
+    }
+
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
     let ga = GitHubAction::from_json(&github_json);
 
@@ -198,6 +205,11 @@ pub fn submit_pull_request(
     api: &str,
     cli: &Cli,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Check for TRUNK_TOKEN at runtime
+    if cli.trunk_token.is_empty() {
+        return Err("TRUNK_TOKEN is required when using API trigger. Provide it via --trunk-token flag or TRUNK_TOKEN environment variable".into());
+    }
+
     // Handle dry-run mode
     if cli.dry_run {
         println!("dry-run: would submit to Trunk API:");

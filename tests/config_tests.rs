@@ -331,43 +331,19 @@ fn test_simple_distribution() {
 
 #[test]
 fn test_api_trigger_trunk_token_validation_in_config() {
-    use gen::cli::Cli;
     use gen::config::EnqueueTrigger;
 
-    // Test with API trigger and empty token - should fail validation
+    // Test with API trigger - should pass config validation
+    // TRUNK_TOKEN validation is now done at runtime when actually needed,
+    // not during config validation
     let mut config = create_test_config(PullRequestConf::default());
     config.merge.trigger = EnqueueTrigger::Api;
 
-    let cli_empty_token = Cli {
-        subcommand: None,
-        gh_token: vec![],
-        trunk_token: String::new(), // Empty token
-        dry_run: false,
-    };
-
-    let result = config.is_valid(Some(&cli_empty_token));
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        "merge trigger is set to 'api' but TRUNK_TOKEN is not available"
-    );
-
-    // Test with API trigger and valid token - should pass validation
-    let cli_valid_token = Cli {
-        subcommand: None,
-        gh_token: vec![],
-        trunk_token: "valid_token_123".to_string(),
-        dry_run: false,
-    };
-
-    let result = config.is_valid(Some(&cli_valid_token));
-    assert!(result.is_ok());
-
-    // Test with API trigger but no CLI context - should fail validation
+    // Config validation should pass regardless of token presence
+    // Token validation happens at runtime in submit_pull_request/upload_targets
     let result = config.is_valid(None);
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        "merge trigger is set to 'api' but CLI context is required for token validation"
+    assert!(
+        result.is_ok(),
+        "API trigger should pass config validation - token check is at runtime"
     );
 }

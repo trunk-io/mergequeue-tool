@@ -8,6 +8,7 @@ use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
 use gen::config::{Conf, EnqueueTrigger};
+use gen::config_error::handle_config_load_error;
 use gen::edit::edit_files_for_pr;
 use gen::github::GitHub;
 use gen::process::{git, run_cmd, try_gh, try_git};
@@ -173,6 +174,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
         }
 
         EnqueueTrigger::Api => {
+            // TRUNK_TOKEN will be checked at runtime in submit_pull_request
             match get_repo_info() {
                 Ok((owner, name)) => {
                     let pr_number: u32 = match pr.parse() {
@@ -193,11 +195,15 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                     ) {
                         Ok(_) => println!("Successfully submitted PR {} to Trunk merge queue", pr),
                         Err(e) => {
-                            eprintln!("Failed to submit PR {} to Trunk merge queue: {:?}", pr, e)
+                            eprintln!("Failed to submit PR {} to Trunk merge queue: {}", pr, e);
+                            std::process::exit(1);
                         }
                     }
                 }
-                Err(e) => eprintln!("Failed to get repository information: {}", e),
+                Err(e) => {
+                    eprintln!("Failed to get repository information: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }
@@ -492,10 +498,7 @@ fn run() -> anyhow::Result<()> {
         .file("mq.toml")
         .file(".config/mq.toml")
         .load()
-        .unwrap_or_else(|err| {
-            eprintln!("Generator cannot run: {}", err);
-            std::process::exit(1);
-        });
+        .unwrap_or_else(|err| handle_config_load_error(err));
 
     config.is_valid(Some(&cli)).unwrap_or_else(|err| {
         eprintln!("Invalid config:\n    {}", err);
