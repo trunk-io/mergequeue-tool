@@ -11,21 +11,13 @@ pub enum Mode {
     ParallelQueue,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Build {
-    #[default]
-    None,
-    Bazel,
-}
-
 #[derive(Config, Serialize, Default)]
 pub struct Conf {
     #[config(default = "singlequeue")]
     pub mode: Mode,
 
     #[config(default = "none")]
-    pub build: Build,
+    pub build: String,
 
     #[config(nested)]
     pub trunk: TrunkConf,
@@ -326,7 +318,7 @@ impl Conf {
         Ok(())
     }
 
-    pub fn is_valid(&self, cli: Option<&crate::cli::Cli>) -> Result<(), &'static str> {
+    pub fn is_valid(&self, _cli: Option<&crate::cli::Cli>) -> Result<(), &'static str> {
         if self.test.flake_rate <= 0.0 || self.test.flake_rate > 1.0 {
             return Err("flake_rate must be between 0.0 and 1.0");
         }
@@ -362,15 +354,8 @@ impl Conf {
                 }
             }
             EnqueueTrigger::Api => {
-                if let Some(cli) = cli {
-                    if cli.trunk_token.is_empty() {
-                        return Err(
-                            "merge trigger is set to 'api' but TRUNK_TOKEN is not available",
-                        );
-                    }
-                } else {
-                    return Err("merge trigger is set to 'api' but CLI context is required for token validation");
-                }
+                // TRUNK_TOKEN validation is done at runtime when actually needed
+                // No need to validate here during config loading
             }
         }
 

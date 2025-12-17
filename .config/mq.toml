@@ -67,17 +67,17 @@ close_stale_after = "4 hours"
 flake_rate = 0.1
 
 # Default value: "1 second"
-sleep_for = "1 second"
+sleep_for = "ss1 second"
 
 [merge]
 # Default value: comment
-trigger = "api"
+trigger = "apddi"
 
 # Default value: ""
 #labels = ""
 
 # Default value: ""
-#comment = "/trunk merge"
-
+comment = "/trunk merge"
+efwweg = "e"
 # command to run to queue for merge
 #run = "gh pr merge {{PR_NUMBER}}"
