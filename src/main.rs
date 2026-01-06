@@ -270,6 +270,48 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
     true
 }
 
+fn checkout_branch(branch: &str) -> Result<(), String> {
+    // Check if branch exists locally (quietly - we expect this to fail if branch doesn't exist)
+    let branch_exists_locally =
+        try_git_quiet(&["rev-parse", "--verify", &format!("refs/heads/{}", branch)]).is_ok();
+
+    // Switch to the branch
+    if branch_exists_locally {
+        // Branch exists locally, just checkout
+        if let Err(e) = try_git(&["checkout", branch]) {
+            return Err(format!(
+                "Failed to checkout existing branch '{}': {}",
+                branch, e
+            ));
+        }
+    } else {
+        // Branch doesn't exist locally, fetch from origin to check if it exists there
+        let _ = try_git(&["fetch", "origin", branch]);
+
+        // Check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
+        let remote_branch = format!("origin/{}", branch);
+        let remote_exists =
+            gen::process::try_git_quiet(&["rev-parse", "--verify", &remote_branch]).is_ok();
+
+        if remote_exists {
+            // Branch exists on origin, create local tracking branch
+            if let Err(e) = try_git(&["checkout", "-b", branch, &remote_branch]) {
+                return Err(format!(
+                    "Failed to create local branch '{}' tracking {}: {}",
+                    branch, remote_branch, e
+                ));
+            }
+        } else {
+            return Err(format!(
+                "Base branch '{}' does not exist locally or on origin.",
+                branch
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn get_last_pr(gh_token: &str) -> u32 {
     let result = try_gh(&["pr", "list", "--limit=1", "--json", "number"], gh_token);
     if result.is_err() {
@@ -297,7 +339,7 @@ fn get_last_pr(gh_token: &str) -> u32 {
 }
 
 fn create_pull_request(
-    words: &[String],
+    filenames: &[String],
     last_pr: u32,
     config: &Conf,
     dry_run: bool,
@@ -319,50 +361,15 @@ fn create_pull_request(
         }
     }
 
-    // Check if branch exists locally (quietly - we expect this to fail if branch doesn't exist)
-    let branch_exists_locally = try_git_quiet(&[
-        "rev-parse",
-        "--verify",
-        &format!("refs/heads/{}", base_branch),
-    ])
-    .is_ok();
-
-    // Switch to the base branch
-    if branch_exists_locally {
-        // Branch exists locally, just checkout
-        if let Err(e) = try_git(&["checkout", base_branch]) {
-            return Err(format!(
-                "Failed to checkout existing branch '{}': {}",
-                base_branch, e
-            ));
-        }
-    } else {
-        // Branch doesn't exist locally, fetch from origin to check if it exists there
-        let _ = try_git(&["fetch", "origin", base_branch]);
-
-        // Check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
-        let remote_branch = format!("origin/{}", base_branch);
-        let remote_exists =
-            gen::process::try_git_quiet(&["rev-parse", "--verify", &remote_branch]).is_ok();
-
-        if remote_exists {
-            // Branch exists on origin, create local tracking branch
-            if let Err(e) = try_git(&["checkout", "-b", base_branch, &remote_branch]) {
-                return Err(format!(
-                    "Failed to create local branch '{}' tracking {}: {}",
-                    base_branch, remote_branch, e
-                ));
-            }
-        } else {
-            return Err(format!(
-                "Base branch '{}' does not exist locally or on origin.",
-                base_branch
-            ));
-        }
-    }
+    // Checkout the base branch (will fetch from origin if needed)
+    checkout_branch(base_branch)?;
 
     // Pull latest changes
     let _ = try_git(&["pull"]);
+
+    // Now edit the files to create changes (after we're on the correct base branch)
+    let next_pr_number = last_pr + 1;
+    let words = edit_files_for_pr(filenames, next_pr_number, config);
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-b", &branch_name]);
@@ -538,10 +545,6 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
         filenames.sort();
 
-        // Use deterministic dependency count based on PR number
-        let next_pr_number = last_pr + 1;
-        let words = edit_files_for_pr(&filenames, next_pr_number, config);
-
         // Select token for this PR (round-robin)
         let current_token = &github_tokens[token_index % github_tokens.len()];
 
@@ -550,7 +553,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let base_branch = &protected_branches[token_index % protected_branches.len()];
 
         let pr_result = create_pull_request(
-            &words,
+            &filenames,
             last_pr,
             config,
             cli.dry_run,
@@ -558,7 +561,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             base_branch,
         );
         if pr_result.is_err() {
-            println!("problem created pr for {:?}", words);
+            println!("problem created pr for files: {:?}", filenames);
             continue;
         }
         let duration = start.elapsed();
