@@ -367,8 +367,21 @@ fn create_pull_request(
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-b", &branch_name]);
 
+    // Stage all changes (including untracked files)
+    let _ = try_git(&["add", "-A"]);
+
+    // Check if there are any changes to commit
+    let status_output = try_git(&["status", "--porcelain"]);
+    if let Ok(output) = status_output {
+        if output.trim().is_empty() {
+            return Err(format!("No changes to commit for PR. Words: {:?}", words));
+        }
+    }
+
     let commit_msg = format!("Moving words {}", words.join(", "));
-    git(&["commit", "--no-verify", "-am", &commit_msg]);
+    if let Err(e) = try_git(&["commit", "--no-verify", "-m", &commit_msg]) {
+        return Err(format!("Failed to commit changes: {}", e));
+    }
 
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
