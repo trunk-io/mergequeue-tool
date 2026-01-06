@@ -308,8 +308,16 @@ fn create_pull_request(
 
     let current_branch = git(&["branch", "--show-current"]);
 
-    // Fetch latest changes to ensure we have all remote branches
-    let _ = try_git(&["fetch", "origin"]);
+    // Clean up any uncommitted changes before switching branches
+    // Check if there are any uncommitted changes
+    let status_output = try_git(&["status", "--porcelain"]);
+    if let Ok(output) = status_output {
+        if !output.trim().is_empty() {
+            // There are uncommitted changes, reset them to ensure clean state
+            let _ = try_git(&["reset", "--hard", "HEAD"]);
+            let _ = try_git(&["clean", "-fd"]);
+        }
+    }
 
     // Check if branch exists locally (quietly - we expect this to fail if branch doesn't exist)
     let branch_exists_locally = try_git_quiet(&[
@@ -329,8 +337,10 @@ fn create_pull_request(
             ));
         }
     } else {
-        // Branch doesn't exist locally, try to create it from origin
-        // First check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
+        // Branch doesn't exist locally, fetch from origin to check if it exists there
+        let _ = try_git(&["fetch", "origin", base_branch]);
+
+        // Check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
         let remote_branch = format!("origin/{}", base_branch);
         let remote_exists =
             gen::process::try_git_quiet(&["rev-parse", "--verify", &remote_branch]).is_ok();
@@ -344,12 +354,9 @@ fn create_pull_request(
                 ));
             }
         } else {
-            // Branch doesn't exist on origin either
-            let available_branches =
-                try_git(&["branch", "-r"]).unwrap_or_else(|_| "unknown".to_string());
             return Err(format!(
-                "Base branch '{}' does not exist locally or on origin.\nAvailable remote branches:\n{}",
-                base_branch, available_branches
+                "Base branch '{}' does not exist locally or on origin.",
+                base_branch
             ));
         }
     }
@@ -434,8 +441,11 @@ fn create_pull_request(
 
     let result = try_gh(args.as_slice(), gh_token);
 
-    // no matter what is result - need to reset checkout
+    // no matter what is result - need to reset checkout and clean up
     git(&["checkout", &current_branch]);
+    // Clean up any uncommitted changes and untracked files
+    let _ = try_git(&["reset", "--hard", "HEAD"]);
+    let _ = try_git(&["clean", "-fd"]);
     git(&["pull"]);
 
     if result.is_err() {
