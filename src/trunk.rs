@@ -62,7 +62,12 @@ mod tests {
     }
 }
 
-pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
+pub fn upload_targets(
+    config: &Conf,
+    cli: &Cli,
+    github_json_path: &str,
+    targets_json_path: Option<&str>,
+) {
     // Check for TRUNK_TOKEN at runtime
     if cli.trunk_token.is_empty() {
         eprintln!("TRUNK_TOKEN is required for upload-targets subcommand");
@@ -73,18 +78,31 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
     let ga = GitHubAction::from_json(&github_json);
 
-    if !&ga.event.pull_request.body.is_some() {
-        println!("No PR body content found - skipping target upload");
-        println!("The PR body is required to extract dependency information using the format: deps=[target1,target2,target3]");
-        return;
-    }
+    // Get targets either from JSON file or extract from PR body
+    let impacted_targets = if let Some(targets_path) = targets_json_path {
+        // Read targets directly from JSON file
+        let targets_content =
+            fs::read_to_string(targets_path).expect("Failed to read targets JSON file");
+        serde_json::from_str::<Vec<String>>(&targets_content)
+            .expect("Failed to parse targets JSON - expected array of strings")
+    } else {
+        // Extract from PR body (existing behavior)
+        if !&ga.event.pull_request.body.is_some() {
+            println!("No PR body content found - skipping target upload");
+            println!("The PR body is required to extract dependency information using the format: deps=[target1,target2,target3]");
+            println!("Alternatively, use --targets-json to provide targets directly");
+            return;
+        }
 
-    let body = ga.event.pull_request.body.clone().unwrap();
-    let impacted_targets = get_targets(&body);
+        let body = ga.event.pull_request.body.clone().unwrap();
+        let targets = get_targets(&body);
 
-    if impacted_targets.is_empty() {
-        println!("No deps listed in PR body like deps=[a,b,c]");
-    }
+        if targets.is_empty() {
+            println!("No deps listed in PR body like deps=[a,b,c]");
+        }
+
+        targets
+    };
 
     // Validate that we have targets to upload
     if impacted_targets.is_empty() {
@@ -98,12 +116,13 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         impacted_targets
     );
 
+    let target_branch = ga.base_branch();
     let result = post_targets(
         ga.repo_owner(),
         ga.repo_name(),
         ga.event.pull_request.number,
         &ga.event.pull_request.head.sha,
-        "main",
+        target_branch,
         impacted_targets,
         &config.trunk.api,
         &cli.trunk_token,

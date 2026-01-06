@@ -11,7 +11,7 @@ runtimes:
   enabled:
     - node@22.16.0
     - python@3.10.8
-    - rust@1.82.0
+    - rust@1.92.0
 
 actions:
   enabled:
@@ -24,16 +24,16 @@ lint:
   enabled:
     - actionlint@1.7.7
     - buildifier@8.2.1
-    - checkov@3.2.474
+    - checkov@3.2.497
     - git-diff-check
-    - markdownlint@0.45.0
+    - markdownlint@0.47.0
     - osv-scanner@2.2.3
-    - prettier@3.6.2
+    - prettier@3.7.4
     - rustfmt@1.65.0
     - taplo@0.10.0
     - trufflehog@3.90.8
     - yamllint@1.37.1
-    - clippy@1.82.0
+    - clippy@1.92.0
 
 tools:
   runtimes:

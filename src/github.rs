@@ -20,6 +20,8 @@ impl GitHub {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GitHubAction {
     repository: String,
+    #[serde(rename = "base_ref")]
+    pub base_ref: Option<String>,
     pub event: Event,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -51,5 +53,9 @@ impl GitHubAction {
     pub fn repo_name(&self) -> &str {
         let repo_parts: Vec<&str> = self.repository.split('/').collect();
         repo_parts.get(1).expect("Invalid REPOSITORY format")
+    }
+
+    pub fn base_branch(&self) -> &str {
+        self.base_ref.as_deref().unwrap_or("main")
     }
 }

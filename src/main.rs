@@ -296,13 +296,18 @@ fn create_pull_request(
     config: &Conf,
     dry_run: bool,
     gh_token: &str,
+    base_branch: &str,
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
     let current_branch = git(&["branch", "--show-current"]);
 
+    // Switch to the base branch and pull latest changes
+    git(&["checkout", base_branch]);
+    git(&["pull"]);
+
     let branch_name = format!("change/{}", words.join("-"));
-    git(&["checkout", "-t", "-b", &branch_name]);
+    git(&["checkout", "-b", &branch_name]);
 
     let commit_msg = format!("Moving words {}", words.join(", "));
     git(&["commit", "--no-verify", "-am", &commit_msg]);
@@ -354,7 +359,16 @@ fn create_pull_request(
         first_letters.into_iter().collect::<Vec<_>>().join(",")
     ));
 
-    let mut args: Vec<&str> = vec!["pr", "create", "--title", &title, "--body", &body];
+    let mut args: Vec<&str> = vec![
+        "pr",
+        "create",
+        "--title",
+        &title,
+        "--body",
+        &body,
+        "--base",
+        base_branch,
+    ];
 
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
@@ -457,7 +471,18 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         // Select token for this PR (round-robin)
         let current_token = &github_tokens[token_index % github_tokens.len()];
 
-        let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
+        // Select base branch for this PR (round-robin from protected_branches)
+        let protected_branches = &config.pullrequest.protected_branches;
+        let base_branch = &protected_branches[token_index % protected_branches.len()];
+
+        let pr_result = create_pull_request(
+            &words,
+            last_pr,
+            config,
+            cli.dry_run,
+            current_token,
+            base_branch,
+        );
         if pr_result.is_err() {
             println!("problem created pr for {:?}", words);
             continue;
@@ -526,7 +551,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Generate {}) => generate(&config, &cli),
         Some(Subcommands::UploadTargets(ut)) => {
             // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
-            upload_targets(&config, &cli, &ut.github_json);
+            upload_targets(&config, &cli, &ut.github_json, ut.targets_json.as_deref());
             Ok(())
         }
         Some(Subcommands::Enqueue(enqueue_args)) => {
