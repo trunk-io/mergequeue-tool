@@ -110,13 +110,14 @@ pub fn upload_targets(
         return;
     }
 
+    let target_branch = ga.base_branch();
     println!(
-        "Uploading {} impacted targets: {:?}",
+        "Uploading {} impacted targets: {:?} (target branch: {})",
         impacted_targets.len(),
-        impacted_targets
+        impacted_targets,
+        target_branch
     );
 
-    let target_branch = ga.base_branch();
     let result = post_targets(
         ga.repo_owner(),
         ga.repo_name(),
@@ -186,6 +187,7 @@ pub fn post_targets(
         println!("  URL: https://{}:443/v1/setImpactedTargets", api);
         println!("  Repository: {}/{}", repo_owner, repo_name);
         println!("  PR Number: {}", pr_number);
+        println!("  Target Branch: {}", target_branch);
         println!("  Impacted Targets: {:?}", impacted_targets);
 
         match status.as_u16() {

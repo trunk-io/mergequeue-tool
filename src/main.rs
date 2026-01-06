@@ -184,16 +184,22 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                             return;
                         }
                     };
+                    // Get the PR's base branch
+                    let target_branch = get_pr_base_branch(pr, gh_token);
+                    println!("Enqueuing PR {} targeting branch: {}", pr, target_branch);
                     match submit_pull_request(
                         &owner,
                         &name,
                         pr_number,
-                        "main", // Default target branch, could be made configurable
-                        None,   // Default priority, could be made configurable
+                        &target_branch,
+                        None, // Default priority, could be made configurable
                         &config.trunk.api,
                         cli,
                     ) {
-                        Ok(_) => println!("Successfully submitted PR {} to Trunk merge queue", pr),
+                        Ok(_) => println!(
+                            "Successfully submitted PR {} to Trunk merge queue (target: {})",
+                            pr, target_branch
+                        ),
                         Err(e) => {
                             eprintln!("Failed to submit PR {} to Trunk merge queue: {}", pr, e);
                             std::process::exit(1);
@@ -262,6 +268,40 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
 
     git(&["add", &config.pullrequest.logical_conflict_file]);
     true
+}
+
+fn get_pr_base_branch(pr: &str, gh_token: &str) -> String {
+    let result = try_gh(&["pr", "view", pr, "--json", "baseRefName"], gh_token);
+    if result.is_err() {
+        // Log the error and fallback to "main" if we can't get the PR info
+        eprintln!(
+            "Warning: Failed to get base branch for PR {}: {:?}. Falling back to 'main'",
+            pr,
+            result.as_ref().err()
+        );
+        return "main".to_string();
+    }
+    let json_str = result.unwrap();
+    let v: Value = match serde_json::from_str(&json_str) {
+        Ok(val) => val,
+        Err(e) => {
+            eprintln!(
+                "Warning: Failed to parse PR info JSON for PR {}: {}. Falling back to 'main'",
+                pr, e
+            );
+            return "main".to_string();
+        }
+    };
+    v["baseRefName"]
+        .as_str()
+        .unwrap_or_else(|| {
+            eprintln!(
+                "Warning: PR {} JSON does not contain 'baseRefName' field. Falling back to 'main'",
+                pr
+            );
+            "main"
+        })
+        .to_string()
 }
 
 fn get_last_pr(gh_token: &str) -> u32 {
@@ -342,8 +382,8 @@ fn create_pull_request(
         config.pullrequest.close_stale_after
     ));
     body.push_str(&format!(
-        "\n\n[pullrequest]\nrequests per hour: {}\n",
-        config.pullrequest.requests_per_hour
+        "\n\n[pullrequest]\nrequests per hour: {}\ntarget branch: {}\n",
+        config.pullrequest.requests_per_hour, base_branch
     ));
 
     let mut first_letters: Vec<_> = words
@@ -490,8 +530,9 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let duration = start.elapsed();
         let pr = pr_result.unwrap();
         println!(
-            "created pr: {} in {:?} // waiting: {} mins",
+            "created pr: {} (target: {}) in {:?} // waiting: {} mins",
             pr,
+            base_branch,
             duration,
             (pull_request_every as f32 / 60.0)
         );
