@@ -372,7 +372,7 @@ fn create_pull_request(
         }
     }
 
-    let mut title = words.join(", ");
+    let mut title = format!("[{}] {}", base_branch, words.join(", "));
     if lc {
         title = format!("{} (logical-conflict)", title);
     }
