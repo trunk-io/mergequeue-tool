@@ -346,8 +346,6 @@ fn create_pull_request(
     gh_token: &str,
     base_branch: &str,
 ) -> Result<String, String> {
-    let lc = maybe_add_logical_merge_conflict(last_pr, config);
-
     let current_branch = git(&["branch", "--show-current"]);
 
     // Checkout the base branch (will fetch from origin if needed)
@@ -363,15 +361,12 @@ fn create_pull_request(
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-b", &branch_name]);
 
-    // Stage all changes (including untracked files)
-    let _ = try_git(&["add", "-A"]);
+    // Create logical conflict file if needed (after we're on the new branch)
+    let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
-    // Check if there are any changes to commit
-    let status_output = try_git(&["status", "--porcelain"]);
-    if let Ok(output) = status_output {
-        if output.trim().is_empty() {
-            return Err(format!("No changes to commit for PR. Words: {:?}", words));
-        }
+    // Stage only the files that were modified (not all changes)
+    for filename in filenames {
+        let _ = try_git(&["add", filename]);
     }
 
     let commit_msg = format!("Moving words {}", words.join(", "));
