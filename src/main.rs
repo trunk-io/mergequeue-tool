@@ -11,7 +11,7 @@ use gen::config::{Conf, EnqueueTrigger};
 use gen::config_error::handle_config_load_error;
 use gen::edit::edit_files_for_pr;
 use gen::github::GitHub;
-use gen::process::{git, run_cmd, try_gh, try_git};
+use gen::process::{git, run_cmd, try_gh, try_git, try_git_quiet};
 use gen::trunk::{submit_pull_request, upload_targets};
 use rand::Rng;
 use regex::Regex;
@@ -311,8 +311,8 @@ fn create_pull_request(
     // Fetch latest changes to ensure we have all remote branches
     let _ = try_git(&["fetch", "origin"]);
 
-    // Check if branch exists locally
-    let branch_exists_locally = try_git(&[
+    // Check if branch exists locally (quietly - we expect this to fail if branch doesn't exist)
+    let branch_exists_locally = try_git_quiet(&[
         "rev-parse",
         "--verify",
         &format!("refs/heads/{}", base_branch),
@@ -330,9 +330,10 @@ fn create_pull_request(
         }
     } else {
         // Branch doesn't exist locally, try to create it from origin
-        // First check if it exists on origin by trying to fetch it explicitly
+        // First check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
         let remote_branch = format!("origin/{}", base_branch);
-        let remote_exists = try_git(&["rev-parse", "--verify", &remote_branch]).is_ok();
+        let remote_exists =
+            gen::process::try_git_quiet(&["rev-parse", "--verify", &remote_branch]).is_ok();
 
         if remote_exists {
             // Branch exists on origin, create local tracking branch
