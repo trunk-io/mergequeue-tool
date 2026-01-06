@@ -350,17 +350,6 @@ fn create_pull_request(
 
     let current_branch = git(&["branch", "--show-current"]);
 
-    // Clean up any uncommitted changes before switching branches
-    // Check if there are any uncommitted changes
-    let status_output = try_git(&["status", "--porcelain"]);
-    if let Ok(output) = status_output {
-        if !output.trim().is_empty() {
-            // There are uncommitted changes, reset them to ensure clean state
-            let _ = try_git(&["reset", "--hard", "HEAD"]);
-            let _ = try_git(&["clean", "-fd"]);
-        }
-    }
-
     // Checkout the base branch (will fetch from origin if needed)
     checkout_branch(base_branch)?;
 
