@@ -185,7 +185,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                         }
                     };
                     // Get the PR's base branch
-                    let target_branch = get_pr_base_branch(pr, gh_token);
+                    let target_branch = GitHub::get_pr_base_branch(pr, gh_token);
                     println!("Enqueuing PR {} targeting branch: {}", pr, target_branch);
                     match submit_pull_request(
                         &owner,
@@ -268,40 +268,6 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
 
     git(&["add", &config.pullrequest.logical_conflict_file]);
     true
-}
-
-fn get_pr_base_branch(pr: &str, gh_token: &str) -> String {
-    let result = try_gh(&["pr", "view", pr, "--json", "baseRefName"], gh_token);
-    if result.is_err() {
-        // Log the error and fallback to "main" if we can't get the PR info
-        eprintln!(
-            "Warning: Failed to get base branch for PR {}: {:?}. Falling back to 'main'",
-            pr,
-            result.as_ref().err()
-        );
-        return "main".to_string();
-    }
-    let json_str = result.unwrap();
-    let v: Value = match serde_json::from_str(&json_str) {
-        Ok(val) => val,
-        Err(e) => {
-            eprintln!(
-                "Warning: Failed to parse PR info JSON for PR {}: {}. Falling back to 'main'",
-                pr, e
-            );
-            return "main".to_string();
-        }
-    };
-    v["baseRefName"]
-        .as_str()
-        .unwrap_or_else(|| {
-            eprintln!(
-                "Warning: PR {} JSON does not contain 'baseRefName' field. Falling back to 'main'",
-                pr
-            );
-            "main"
-        })
-        .to_string()
 }
 
 fn get_last_pr(gh_token: &str) -> u32 {
@@ -592,7 +558,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Generate {}) => generate(&config, &cli),
         Some(Subcommands::UploadTargets(ut)) => {
             // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
-            upload_targets(&config, &cli, &ut.github_json, ut.targets_json.as_deref());
+            upload_targets(&config, &cli, &ut.github_json);
             Ok(())
         }
         Some(Subcommands::Enqueue(enqueue_args)) => {

@@ -1,5 +1,6 @@
 use crate::process::try_gh;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub struct GitHub;
 
@@ -14,6 +15,40 @@ impl GitHub {
 
     pub fn add_label(pr: &str, label: &str, token: &str) -> String {
         try_gh(&["pr", "edit", pr, "--add-label", label], token).expect("Failed to add label to PR")
+    }
+
+    pub fn get_pr_base_branch(pr: &str, gh_token: &str) -> String {
+        let result = try_gh(&["pr", "view", pr, "--json", "baseRefName"], gh_token);
+        if result.is_err() {
+            // Log the error and fallback to "main" if we can't get the PR info
+            eprintln!(
+                "Warning: Failed to get base branch for PR {}: {:?}. Falling back to 'main'",
+                pr,
+                result.as_ref().err()
+            );
+            return "main".to_string();
+        }
+        let json_str = result.unwrap();
+        let v: Value = match serde_json::from_str(&json_str) {
+            Ok(val) => val,
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to parse PR info JSON for PR {}: {}. Falling back to 'main'",
+                    pr, e
+                );
+                return "main".to_string();
+            }
+        };
+        v["baseRefName"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "Warning: PR {} JSON does not contain 'baseRefName' field. Falling back to 'main'",
+                    pr
+                );
+                "main"
+            })
+            .to_string()
     }
 }
 

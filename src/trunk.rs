@@ -1,6 +1,6 @@
 use crate::cli::Cli;
 use crate::config::Conf;
-use crate::github::GitHubAction;
+use crate::github::{GitHub, GitHubAction};
 use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
@@ -73,6 +73,7 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
     let ga = GitHubAction::from_json(&github_json);
 
+    // Extract targets from PR body
     if !&ga.event.pull_request.body.is_some() {
         println!("No PR body content found - skipping target upload");
         println!("The PR body is required to extract dependency information using the format: deps=[target1,target2,target3]");
@@ -92,12 +93,16 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         return;
     }
 
-    println!(
-        "Uploading {} impacted targets: {:?}",
-        impacted_targets.len(),
-        impacted_targets
-    );
-    let target_branch = ga.base_branch();
+    // Get the PR's base branch using GitHub API
+    let github_tokens = cli.get_github_tokens();
+    let gh_token = github_tokens.first().map(|t| t.as_str()).unwrap_or("");
+    let pr_number_str = ga.event.pull_request.number.to_string();
+    let target_branch = if !gh_token.is_empty() {
+        GitHub::get_pr_base_branch(&pr_number_str, gh_token)
+    } else {
+        // Fallback to base_ref from JSON if no token available
+        ga.base_branch().to_string()
+    };
     println!(
         "Uploading {} impacted targets: {:?} (target branch: {})",
         impacted_targets.len(),
@@ -110,7 +115,7 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         ga.repo_name(),
         ga.event.pull_request.number,
         &ga.event.pull_request.head.sha,
-        target_branch,
+        &target_branch,
         impacted_targets,
         &config.trunk.api,
         &cli.trunk_token,
