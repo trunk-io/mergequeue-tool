@@ -9,6 +9,15 @@ fn exec_with_env(
     args: &[&str],
     env_vars: Option<&[(&str, &str)]>,
 ) -> Result<String, String> {
+    exec_with_env_quiet(cmd, args, env_vars, false)
+}
+
+fn exec_with_env_quiet(
+    cmd: &str,
+    args: &[&str],
+    env_vars: Option<&[(&str, &str)]>,
+    quiet: bool,
+) -> Result<String, String> {
     let mut command = Command::new(cmd);
     command.args(args);
 
@@ -23,8 +32,10 @@ fn exec_with_env(
         .unwrap_or_else(|_| panic!("Failed to execute {}", cmd));
 
     if !output.status.success() {
-        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        eprintln!("Call to {} {} failed", cmd, args.join(" "));
+        if !quiet {
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            eprintln!("Call to {} {} failed", cmd, args.join(" "));
+        }
         return Err(String::from_utf8_lossy(&output.stderr)
             .into_owned()
             .trim()
@@ -52,4 +63,8 @@ pub fn git(args: &[&str]) -> String {
 
 pub fn try_git(args: &[&str]) -> Result<String, String> {
     exec("git", args)
+}
+
+pub fn try_git_quiet(args: &[&str]) -> Result<String, String> {
+    exec_with_env_quiet("git", args, None, true)
 }

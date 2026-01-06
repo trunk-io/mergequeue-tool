@@ -11,7 +11,7 @@ use gen::config::{Conf, EnqueueTrigger};
 use gen::config_error::handle_config_load_error;
 use gen::edit::edit_files_for_pr;
 use gen::github::GitHub;
-use gen::process::{git, run_cmd, try_gh, try_git};
+use gen::process::{git, run_cmd, try_gh, try_git, try_git_quiet};
 use gen::trunk::{submit_pull_request, upload_targets};
 use rand::Rng;
 use regex::Regex;
@@ -184,16 +184,22 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                             return;
                         }
                     };
+                    // Get the PR's base branch
+                    let target_branch = GitHub::get_pr_base_branch(pr, gh_token);
+                    println!("Enqueuing PR {} targeting branch: {}", pr, target_branch);
                     match submit_pull_request(
                         &owner,
                         &name,
                         pr_number,
-                        "main", // Default target branch, could be made configurable
-                        None,   // Default priority, could be made configurable
+                        &target_branch,
+                        None, // Default priority, could be made configurable
                         &config.trunk.api,
                         cli,
                     ) {
-                        Ok(_) => println!("Successfully submitted PR {} to Trunk merge queue", pr),
+                        Ok(_) => println!(
+                            "Successfully submitted PR {} to Trunk merge queue (target: {})",
+                            pr, target_branch
+                        ),
                         Err(e) => {
                             eprintln!("Failed to submit PR {} to Trunk merge queue: {}", pr, e);
                             std::process::exit(1);
@@ -264,6 +270,48 @@ fn maybe_add_logical_merge_conflict(last_pr: u32, config: &Conf) -> bool {
     true
 }
 
+fn checkout_branch(branch: &str) -> Result<(), String> {
+    // Check if branch exists locally (quietly - we expect this to fail if branch doesn't exist)
+    let branch_exists_locally =
+        try_git_quiet(&["rev-parse", "--verify", &format!("refs/heads/{}", branch)]).is_ok();
+
+    // Switch to the branch
+    if branch_exists_locally {
+        // Branch exists locally, just checkout
+        if let Err(e) = try_git(&["checkout", branch]) {
+            return Err(format!(
+                "Failed to checkout existing branch '{}': {}",
+                branch, e
+            ));
+        }
+    } else {
+        // Branch doesn't exist locally, fetch from origin to check if it exists there
+        let _ = try_git(&["fetch", "origin", branch]);
+
+        // Check if it exists on origin (quietly - we expect this to fail if branch doesn't exist)
+        let remote_branch = format!("origin/{}", branch);
+        let remote_exists =
+            gen::process::try_git_quiet(&["rev-parse", "--verify", &remote_branch]).is_ok();
+
+        if remote_exists {
+            // Branch exists on origin, create local tracking branch
+            if let Err(e) = try_git(&["checkout", "-b", branch, &remote_branch]) {
+                return Err(format!(
+                    "Failed to create local branch '{}' tracking {}: {}",
+                    branch, remote_branch, e
+                ));
+            }
+        } else {
+            return Err(format!(
+                "Base branch '{}' does not exist locally or on origin.",
+                branch
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn get_last_pr(gh_token: &str) -> u32 {
     let result = try_gh(&["pr", "list", "--limit=1", "--json", "number"], gh_token);
     if result.is_err() {
@@ -291,21 +339,45 @@ fn get_last_pr(gh_token: &str) -> u32 {
 }
 
 fn create_pull_request(
-    words: &[String],
+    filenames: &[String],
     last_pr: u32,
     config: &Conf,
     dry_run: bool,
     gh_token: &str,
+    base_branch: &str,
 ) -> Result<String, String> {
     let lc = maybe_add_logical_merge_conflict(last_pr, config);
 
     let current_branch = git(&["branch", "--show-current"]);
 
+    // Checkout the base branch (will fetch from origin if needed)
+    checkout_branch(base_branch)?;
+
+    // Pull latest changes
+    let _ = try_git(&["pull"]);
+
+    // Now edit the files to create changes (after we're on the correct base branch)
+    let next_pr_number = last_pr + 1;
+    let words = edit_files_for_pr(filenames, next_pr_number, config);
+
     let branch_name = format!("change/{}", words.join("-"));
-    git(&["checkout", "-t", "-b", &branch_name]);
+    git(&["checkout", "-b", &branch_name]);
+
+    // Stage all changes (including untracked files)
+    let _ = try_git(&["add", "-A"]);
+
+    // Check if there are any changes to commit
+    let status_output = try_git(&["status", "--porcelain"]);
+    if let Ok(output) = status_output {
+        if output.trim().is_empty() {
+            return Err(format!("No changes to commit for PR. Words: {:?}", words));
+        }
+    }
 
     let commit_msg = format!("Moving words {}", words.join(", "));
-    git(&["commit", "--no-verify", "-am", &commit_msg]);
+    if let Err(e) = try_git(&["commit", "--no-verify", "-m", &commit_msg]) {
+        return Err(format!("Failed to commit changes: {}", e));
+    }
 
     if !dry_run {
         let result = try_git(&["push", "--set-upstream", "origin", "HEAD"]);
@@ -316,7 +388,7 @@ fn create_pull_request(
         }
     }
 
-    let mut title = words.join(", ");
+    let mut title = format!("[{}] {}", base_branch, words.join(", "));
     if lc {
         title = format!("{} (logical-conflict)", title);
     }
@@ -337,8 +409,8 @@ fn create_pull_request(
         config.pullrequest.close_stale_after
     ));
     body.push_str(&format!(
-        "\n\n[pullrequest]\nrequests per hour: {}\n",
-        config.pullrequest.requests_per_hour
+        "\n\n[pullrequest]\nrequests per hour: {}\ntarget branch: {}\n",
+        config.pullrequest.requests_per_hour, base_branch
     ));
 
     let mut first_letters: Vec<_> = words
@@ -354,7 +426,16 @@ fn create_pull_request(
         first_letters.into_iter().collect::<Vec<_>>().join(",")
     ));
 
-    let mut args: Vec<&str> = vec!["pr", "create", "--title", &title, "--body", &body];
+    let mut args: Vec<&str> = vec![
+        "pr",
+        "create",
+        "--title",
+        &title,
+        "--body",
+        &body,
+        "--base",
+        base_branch,
+    ];
 
     for lbl in config.pullrequest.labels.split(',') {
         args.push("--label");
@@ -369,8 +450,11 @@ fn create_pull_request(
 
     let result = try_gh(args.as_slice(), gh_token);
 
-    // no matter what is result - need to reset checkout
+    // no matter what is result - need to reset checkout and clean up
     git(&["checkout", &current_branch]);
+    // Clean up any uncommitted changes and untracked files
+    let _ = try_git(&["reset", "--hard", "HEAD"]);
+    let _ = try_git(&["clean", "-fd"]);
     git(&["pull"]);
 
     if result.is_err() {
@@ -450,23 +534,31 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
         filenames.sort();
 
-        // Use deterministic dependency count based on PR number
-        let next_pr_number = last_pr + 1;
-        let words = edit_files_for_pr(&filenames, next_pr_number, config);
-
         // Select token for this PR (round-robin)
         let current_token = &github_tokens[token_index % github_tokens.len()];
 
-        let pr_result = create_pull_request(&words, last_pr, config, cli.dry_run, current_token);
+        // Select base branch for this PR (round-robin from protected_branches)
+        let protected_branches = &config.pullrequest.protected_branches;
+        let base_branch = &protected_branches[token_index % protected_branches.len()];
+
+        let pr_result = create_pull_request(
+            &filenames,
+            last_pr,
+            config,
+            cli.dry_run,
+            current_token,
+            base_branch,
+        );
         if pr_result.is_err() {
-            println!("problem created pr for {:?}", words);
+            println!("problem created pr for files: {:?}", filenames);
             continue;
         }
         let duration = start.elapsed();
         let pr = pr_result.unwrap();
         println!(
-            "created pr: {} in {:?} // waiting: {} mins",
+            "created pr: {} (target: {}) in {:?} // waiting: {} mins",
             pr,
+            base_branch,
             duration,
             (pull_request_every as f32 / 60.0)
         );

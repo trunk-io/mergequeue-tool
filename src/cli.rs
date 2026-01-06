@@ -60,6 +60,12 @@ pub struct UploadTargets {
     // Path to file that contains github-json block
     #[clap(long = "github-json")]
     pub github_json: String,
+
+    /// Optional: Path to JSON file containing array of targets to upload directly
+    /// If provided, targets will be read from this file instead of extracting from PR body
+    /// File should contain a JSON array: ["target1", "target2", "target3"]
+    #[clap(long = "targets-json")]
+    pub targets_json: Option<String>,
 }
 
 #[derive(Parser, Debug)]

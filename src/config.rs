@@ -98,6 +98,9 @@ pub struct PullRequestConf {
 
     #[config(default = "4 hours")]
     pub close_stale_after: String,
+
+    #[config(default = ["main"])]
+    pub protected_branches: Vec<String>,
 }
 
 #[derive(Config, Serialize, Default)]
