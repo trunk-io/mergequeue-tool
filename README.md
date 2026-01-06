@@ -13,6 +13,7 @@ Usage: mq [OPTIONS] [COMMAND]
 Commands:
   generate       Generate pull requests
   enqueue        Enqueue a specific pull request to the merge queue
+  upload-targets Upload impacted targets for a pull request
   test-sim       Simulate a test with flake rate in consideration
   housekeeping   Clean out conflicting PRs and requeue failed PRs
   config         Print current configuration content to json
@@ -33,6 +34,10 @@ operate in two different modes. By setting the mutually exclusive requests_per_h
 requests_per_run value you are specifying to either run in either distributed mode which will try to
 distribute the generate load across the specified `run_generate_for` value or burst mode which will
 attempt to create pull requests as quickly as possible given the specified `requests_per_run` value.
+
+Generated PRs will target branches from the `protected_branches` list in round-robin fashion. Each
+PR includes the target branch information in its body, and the tool automatically detects the
+correct target branch when uploading impacted targets or enqueuing PRs via the API.
 
 Burst Mode configuration to create 20 pull requests as quickly as possible
 
@@ -125,6 +130,11 @@ assuming `mq generate` is called every 10 minutes.
 
 # Default value: "4 hours"
 #close_stale_after = "4 hours"
+
+# List of protected branches that PRs should target
+# PRs will be created targeting these branches in round-robin fashion
+# Default value: ["main"]
+#protected_branches = ["main", "develop", "release"]
 
 [test]
 # Default value: 0.1

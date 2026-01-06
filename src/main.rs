@@ -308,9 +308,53 @@ fn create_pull_request(
 
     let current_branch = git(&["branch", "--show-current"]);
 
-    // Switch to the base branch and pull latest changes
-    git(&["checkout", base_branch]);
-    git(&["pull"]);
+    // Fetch latest changes to ensure we have all remote branches
+    let _ = try_git(&["fetch", "origin"]);
+
+    // Check if branch exists locally
+    let branch_exists_locally = try_git(&[
+        "rev-parse",
+        "--verify",
+        &format!("refs/heads/{}", base_branch),
+    ])
+    .is_ok();
+
+    // Switch to the base branch
+    if branch_exists_locally {
+        // Branch exists locally, just checkout
+        if let Err(e) = try_git(&["checkout", base_branch]) {
+            return Err(format!(
+                "Failed to checkout existing branch '{}': {}",
+                base_branch, e
+            ));
+        }
+    } else {
+        // Branch doesn't exist locally, try to create it from origin
+        // First check if it exists on origin by trying to fetch it explicitly
+        let remote_branch = format!("origin/{}", base_branch);
+        let remote_exists = try_git(&["rev-parse", "--verify", &remote_branch]).is_ok();
+
+        if remote_exists {
+            // Branch exists on origin, create local tracking branch
+            if let Err(e) = try_git(&["checkout", "-b", base_branch, &remote_branch]) {
+                return Err(format!(
+                    "Failed to create local branch '{}' tracking {}: {}",
+                    base_branch, remote_branch, e
+                ));
+            }
+        } else {
+            // Branch doesn't exist on origin either
+            let available_branches =
+                try_git(&["branch", "-r"]).unwrap_or_else(|_| "unknown".to_string());
+            return Err(format!(
+                "Base branch '{}' does not exist locally or on origin.\nAvailable remote branches:\n{}",
+                base_branch, available_branches
+            ));
+        }
+    }
+
+    // Pull latest changes
+    let _ = try_git(&["pull"]);
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-b", &branch_name]);
