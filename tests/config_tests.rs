@@ -1,5 +1,8 @@
 use gen::config::{Conf, MergeConf, PullRequestConf, TestConf};
 
+mod test_utils;
+use test_utils::run_mq_with_config_and_args;
+
 /// Helper function to create a test config with valid defaults
 fn create_test_config(pullrequest: PullRequestConf) -> Conf {
     Conf {
@@ -346,4 +349,140 @@ fn test_api_trigger_trunk_token_validation_in_config() {
         result.is_ok(),
         "API trigger should pass config validation - token check is at runtime"
     );
+}
+
+#[test]
+fn test_config_full_output() {
+    let config = r#"
+[trunk]
+api = "api.test.io"
+
+[git]
+name = "Test User"
+email = "test@example.com"
+
+[pullrequest]
+max_deps = 5
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) = run_mq_with_config_and_args(config, "config", &[]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    // Should output full JSON config
+    assert!(stdout.contains("\"trunk\""), "Should contain trunk section");
+    assert!(stdout.contains("\"git\""), "Should contain git section");
+    assert!(stdout.contains("api.test.io"), "Should contain api value");
+}
+
+#[test]
+fn test_config_single_value_string() {
+    let config = r#"
+[trunk]
+api = "api.test.io"
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) = run_mq_with_config_and_args(config, "config", &["trunk.api"]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    // String values should be output without quotes
+    assert_eq!(stdout.trim(), "api.test.io");
+}
+
+#[test]
+fn test_config_single_value_nested() {
+    let config = r#"
+[git]
+name = "Test User"
+email = "test@example.com"
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) = run_mq_with_config_and_args(config, "config", &["git.name"]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    assert_eq!(stdout.trim(), "Test User");
+}
+
+#[test]
+fn test_config_single_value_number() {
+    let config = r#"
+[pullrequest]
+max_deps = 5
+max_impacted_deps = 3
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) =
+        run_mq_with_config_and_args(config, "config", &["pullrequest.max_deps"]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    // Numbers should be output as JSON
+    assert_eq!(stdout.trim(), "5");
+}
+
+#[test]
+fn test_config_invalid_path() {
+    let config = r#"
+[trunk]
+api = "api.test.io"
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, _stdout, stderr) =
+        run_mq_with_config_and_args(config, "config", &["trunk.invalid"]);
+
+    assert_eq!(exit_code, 1, "Should fail for invalid path");
+    assert!(
+        stderr.contains("not found"),
+        "Should contain error message about path not found. stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_config_deeply_nested_path() {
+    let config = r#"
+[pullrequest]
+max_deps = 10
+max_impacted_deps = 5
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) =
+        run_mq_with_config_and_args(config, "config", &["pullrequest.max_impacted_deps"]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    assert_eq!(stdout.trim(), "5");
+}
+
+#[test]
+fn test_config_empty_path_returns_full_config() {
+    let config = r#"
+[trunk]
+api = "api.test.io"
+
+[merge]
+trigger = "api"
+"#;
+
+    // Empty path should return full config
+    let (exit_code, stdout, stderr) = run_mq_with_config_and_args(config, "config", &[""]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    // Should output full JSON config
+    assert!(stdout.contains("\"trunk\""), "Should contain trunk section");
 }

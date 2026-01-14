@@ -41,8 +41,12 @@ impl Cli {
 pub enum Subcommands {
     /// Generate default configuration content for generator
     Defaultconfig,
-    /// Print configuration content to json
-    Config,
+    /// Print configuration content to json, or a single value if path is provided (e.g., "trunk.api")
+    Config {
+        /// Optional path to a specific config value (e.g., "trunk.api")
+        #[arg(value_name = "PATH")]
+        path: Option<String>,
+    },
     /// Clean out conflicting PRs and requeue failed PRs
     Housekeeping,
     /// Simulate a test with flake rate in consideration
