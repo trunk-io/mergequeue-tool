@@ -25,6 +25,14 @@ pub fn get_binary_path() -> PathBuf {
 }
 
 pub fn run_mq_with_config(config_content: &str, subcommand: &str) -> (i32, String, String) {
+    run_mq_with_config_and_args(config_content, subcommand, &[])
+}
+
+pub fn run_mq_with_config_and_args(
+    config_content: &str,
+    subcommand: &str,
+    args: &[&str],
+) -> (i32, String, String) {
     let binary = get_binary_path();
 
     if !binary.exists() {
@@ -51,11 +59,12 @@ pub fn run_mq_with_config(config_content: &str, subcommand: &str) -> (i32, Strin
     fs::write(&config_file, config_content).unwrap();
 
     // Run the binary
-    let output = Command::new(&binary)
-        .arg(subcommand)
-        .current_dir(&temp_dir)
-        .output()
-        .expect("Failed to execute binary");
+    let mut cmd = Command::new(&binary);
+    cmd.arg(subcommand);
+    cmd.args(args);
+    cmd.current_dir(&temp_dir);
+
+    let output = cmd.output().expect("Failed to execute binary");
 
     // Clean up
     let _ = fs::remove_dir_all(&temp_dir);

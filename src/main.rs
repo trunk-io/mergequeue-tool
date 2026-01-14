@@ -604,10 +604,47 @@ fn run() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Some(Subcommands::Config {}) => {
-            let config_json =
-                to_string_pretty(&config).expect("Failed to serialize config to JSON");
-            println!("{}", config_json);
+        Some(Subcommands::Config { path }) => {
+            if let Some(path) = path {
+                let path = path.trim();
+                if path.is_empty() {
+                    // If path is empty, print full config
+                    let config_json =
+                        to_string_pretty(&config).expect("Failed to serialize config to JSON");
+                    println!("{}", config_json);
+                    return Ok(());
+                }
+
+                // Extract a single value from the config
+                let config_json: Value =
+                    serde_json::to_value(&config).expect("Failed to serialize config to JSON");
+
+                let parts: Vec<&str> = path.split('.').collect();
+                let mut current = &config_json;
+
+                for part in parts {
+                    match current.get(part) {
+                        Some(value) => {
+                            current = value;
+                        }
+                        None => {
+                            eprintln!("Config path '{}' not found", path);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+
+                // Output the value - if it's a string, output without quotes, otherwise output as JSON
+                match current {
+                    Value::String(s) => println!("{}", s),
+                    _ => println!("{}", serde_json::to_string(current).unwrap()),
+                }
+            } else {
+                // Print full config as JSON
+                let config_json =
+                    to_string_pretty(&config).expect("Failed to serialize config to JSON");
+                println!("{}", config_json);
+            }
             Ok(())
         }
         Some(Subcommands::Generate {}) => generate(&config, &cli),
