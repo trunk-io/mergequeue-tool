@@ -181,10 +181,6 @@ impl Conf {
                 } else {
                     count.parse().unwrap_or(1)
                 };
-                println!(
-                    "DEBUG: prob={}, count={}, count_for_this_type={}, parsed_count={}",
-                    probability, count, count_for_this_type, parsed_count
-                );
                 for _ in 0..count_for_this_type {
                     sequence.push(parsed_count);
                 }
@@ -214,10 +210,6 @@ impl Conf {
             // Use PR number to index into the uniform sequence
             let pr_index = (pr_number - 1) % 1000; // Convert to 0-based index
             let result = sequence[pr_index as usize];
-            println!(
-                "DEBUG: pr_number={}, pr_index={}, result={}",
-                pr_number, pr_index, result
-            );
             return result;
         }
 
