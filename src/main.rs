@@ -389,7 +389,12 @@ fn create_pull_request(
     }
 
     let mut body = config.pullrequest.body.to_string();
-    body.push_str("\n\n[test]\n");
+    body.push_str(&format!(
+        "\n\ntarget: {}, deps: {}\n",
+        base_branch,
+        words.len()
+    ));
+    body.push_str("\n[test]\n");
     body.push_str(&format!("flake rate: {}\n", config.test.flake_rate));
     body.push_str(&format!(
         "logical conflict every: {}\n",
