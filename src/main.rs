@@ -345,7 +345,7 @@ fn create_pull_request(
     dry_run: bool,
     gh_token: &str,
     base_branch: &str,
-) -> Result<String, String> {
+) -> Result<(String, usize), String> {
     let current_branch = git(&["branch", "--show-current"]);
 
     // Checkout the base branch (will fetch from origin if needed)
@@ -357,6 +357,7 @@ fn create_pull_request(
     // Now edit the files to create changes (after we're on the correct base branch)
     let next_pr_number = last_pr + 1;
     let words = edit_files_for_pr(filenames, next_pr_number, config);
+    let deps_count = words.len();
 
     let branch_name = format!("change/{}", words.join("-"));
     git(&["checkout", "-b", &branch_name]);
@@ -389,12 +390,7 @@ fn create_pull_request(
     }
 
     let mut body = config.pullrequest.body.to_string();
-    body.push_str(&format!(
-        "\n\ntarget: {}, deps: {}\n",
-        base_branch,
-        words.len()
-    ));
-    body.push_str("\n[test]\n");
+    body.push_str("\n\n[test]\n");
     body.push_str(&format!("flake rate: {}\n", config.test.flake_rate));
     body.push_str(&format!(
         "logical conflict every: {}\n",
@@ -445,7 +441,7 @@ fn create_pull_request(
     if dry_run {
         git(&["checkout", &current_branch]);
         git(&["pull"]);
-        return Ok((last_pr + 1).to_string());
+        return Ok(((last_pr + 1).to_string(), deps_count));
     }
 
     let result = try_gh(args.as_slice(), gh_token);
@@ -466,7 +462,7 @@ fn create_pull_request(
     let caps = re.captures(pr_url.trim()).unwrap();
     let pr_number = caps.get(2).map_or("", |m| m.as_str());
 
-    Ok(pr_number.to_string())
+    Ok((pr_number.to_string(), deps_count))
 }
 
 fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
@@ -554,12 +550,13 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             continue;
         }
         let duration = start.elapsed();
-        let pr = pr_result.unwrap();
+        let (pr, deps_count) = pr_result.unwrap();
         println!(
-            "created pr: {} (target: {}) in {:?} // waiting: {} mins",
+            "created pr: {} (target: {}, deps: {}) in {}s // waiting: {} mins",
             pr,
             base_branch,
-            duration,
+            deps_count,
+            duration.as_secs(),
             (pull_request_every as f32 / 60.0)
         );
         thread::sleep(Duration::from_secs(pull_request_every) / 2);
