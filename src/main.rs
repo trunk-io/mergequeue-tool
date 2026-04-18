@@ -626,6 +626,14 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             protected_base
         );
 
+        println!(
+            "stack {} of {}: depth {} — first PR will target '{}'",
+            stack_index + 1,
+            stack_plan.len(),
+            depth,
+            protected_base
+        );
+
         for position in 1..=*depth {
             // Defensive: the first PR in every stack must target the protected branch for this
             // stack, never the previous stack's tip. If this ever fires, something regressed.
