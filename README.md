@@ -39,6 +39,21 @@ Generated PRs will target branches from the `protected_branches` list in round-r
 PR includes the target branch information in its body, and the tool automatically detects the
 correct target branch when uploading impacted targets or enqueuing PRs via the API.
 
+#### Stacked PRs
+
+Set `stacks_distribution` to mix stacked PRs into the generated load. Each entry is
+`probabilityxdepth`, where `depth` is how many PRs end up stacked on top of each other.
+Budgets are computed against the total PR count from `requests_per_run`/`requests_per_hour`.
+
+For example, with `requests_per_run = 10` and `stacks_distribution = "0.8x1,0.2x2"`:
+
+- 80% of the 10 PR budget (8 PRs) are created as solo PRs targeting a protected branch
+- 20% of the 10 PR budget (2 PRs) are grouped into one 2-deep stack; the first PR targets a
+  protected branch and the second PR targets the first PR's head branch
+
+The top PR in each stack uses `gh pr create --base <prior-branch>`, which is how GitHub
+natively supports stacked PRs.
+
 Burst Mode configuration to create 20 pull requests as quickly as possible
 
 ```toml
@@ -118,6 +133,14 @@ assuming `mq generate` is called every 10 minutes.
 # The distribution is stable but shuffled so the occurence rate will be randomly distributed
 # If not set, falls back to max_deps/max_impacted_deps behavior
 # deps_distribution = "0.75x1,0.15x2,0.09x3,0.01xALL"
+
+# Distribution of stack depths for generated PRs.
+# Format: "0.8x1,0.2x2" means 80% of the PR budget is solo PRs (depth 1)
+# and 20% is grouped into 2-deep stacks. Each stack consumes N PR slots
+# from the total budget (requests_per_run / requests_per_hour).
+# Stacked PRs are built on top of each other using `gh pr create --base`
+# targeting the prior PR's head branch. If not set, all PRs are solo.
+# stacks_distribution = "0.8x1,0.2x2"
 
 # Default value: 100
 #logical_conflict_every = 100
