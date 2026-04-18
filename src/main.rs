@@ -385,6 +385,7 @@ fn slug_for_branch_segment(s: &str) -> String {
     }
 }
 
+/// Build and open one generated PR (new branch, edits, commit, push, `gh pr create`).
 fn create_pull_request(
     filenames: &[String],
     last_pr: u32,
@@ -393,9 +394,9 @@ fn create_pull_request(
     gh_token: &str,
     base_branch: &str,
     stack_info: Option<(usize, usize)>,
-    /// GitHub PR number of the PR below this one in the stack (`None` for the stack base).
     stack_parent_pr: Option<u32>,
 ) -> Result<(String, usize, String), String> {
+    // When stacking above the base PR, pass that parent's GitHub PR number (None at stack bottom).
     let current_branch = git(&["branch", "--show-current"]);
 
     // Checkout the base branch (will fetch from origin if needed).
@@ -575,7 +576,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         );
     }
 
-    // get the most recent PR to be created (used for creating logical merge conflicts)
+    // Seed `last_pr` from GitHub so the *first* PR in this run uses a realistic `last_pr + 1` for
+    // `edit_files_for_pr` / logical-conflict cadence; later PRs use the number returned from `gh pr create`.
     let github_tokens = cli.get_github_tokens();
     if github_tokens.is_empty() {
         eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
