@@ -352,6 +352,105 @@ fn test_api_trigger_trunk_token_validation_in_config() {
 }
 
 #[test]
+fn test_plan_stacks_default_is_all_solo() {
+    let config = create_test_config(PullRequestConf::default());
+    let plan = config.plan_stacks(10);
+    assert_eq!(plan.len(), 10);
+    assert!(plan.iter().all(|&d| d == 1));
+}
+
+#[test]
+fn test_plan_stacks_budget_matches_total() {
+    let config = create_test_config(PullRequestConf {
+        stacks_distribution: Some("0.8x1,0.2x2".to_string()),
+        ..Default::default()
+    });
+
+    let plan = config.plan_stacks(10);
+    let total_prs: usize = plan.iter().sum();
+    assert_eq!(total_prs, 10);
+
+    let stacks_of_2 = plan.iter().filter(|&&d| d == 2).count();
+    let stacks_of_1 = plan.iter().filter(|&&d| d == 1).count();
+    // 20% of 10 = 2 PRs, packed into one stack of depth 2
+    assert_eq!(stacks_of_2, 1);
+    // The remaining 8 PRs are solo
+    assert_eq!(stacks_of_1, 8);
+}
+
+#[test]
+fn test_plan_stacks_mixed_depths() {
+    let config = create_test_config(PullRequestConf {
+        stacks_distribution: Some("0.5x1,0.3x2,0.2x5".to_string()),
+        ..Default::default()
+    });
+
+    let plan = config.plan_stacks(20);
+    let total_prs: usize = plan.iter().sum();
+    assert_eq!(total_prs, 20);
+
+    // Every entry must be a valid configured depth
+    for depth in &plan {
+        assert!(
+            *depth == 1 || *depth == 2 || *depth == 5,
+            "unexpected depth {}",
+            depth
+        );
+    }
+}
+
+#[test]
+fn test_plan_stacks_is_deterministic() {
+    let config = create_test_config(PullRequestConf {
+        stacks_distribution: Some("0.6x1,0.4x2".to_string()),
+        ..Default::default()
+    });
+
+    let a = config.plan_stacks(10);
+    let b = config.plan_stacks(10);
+    assert_eq!(a, b);
+}
+
+#[test]
+fn test_stacks_distribution_validation() {
+    // Valid forms
+    let valid = vec!["1.0x1", "0.8x1,0.2x2", "0.5x1,0.3x2,0.2x3"];
+    for distribution in valid {
+        let config = create_test_config(PullRequestConf {
+            stacks_distribution: Some(distribution.to_string()),
+            ..Default::default()
+        });
+        assert!(
+            config.is_valid(None).is_ok(),
+            "Valid stacks_distribution '{}' should pass validation",
+            distribution
+        );
+    }
+
+    // Invalid forms
+    let invalid = vec![
+        ("", "empty"),
+        ("0.5x1,0.3x2", "does not sum to 1.0"),
+        ("1.5x1", "probability > 1.0"),
+        ("0.5x1,0.5x0", "depth is 0"),
+        ("0.5x1,0.5xALL", "ALL not allowed for stacks"),
+        ("0.5x1,0.5", "missing 'x'"),
+    ];
+    for (distribution, description) in invalid {
+        let config = create_test_config(PullRequestConf {
+            stacks_distribution: Some(distribution.to_string()),
+            ..Default::default()
+        });
+        assert!(
+            config.is_valid(None).is_err(),
+            "Invalid stacks_distribution '{}' ({}) should fail validation",
+            distribution,
+            description
+        );
+    }
+}
+
+#[test]
 fn test_config_full_output() {
     let config = r#"
 [trunk]

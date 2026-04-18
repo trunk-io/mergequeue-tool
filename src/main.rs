@@ -345,10 +345,13 @@ fn create_pull_request(
     dry_run: bool,
     gh_token: &str,
     base_branch: &str,
-) -> Result<(String, usize), String> {
+    stack_info: Option<(usize, usize)>,
+) -> Result<(String, usize, String), String> {
     let current_branch = git(&["branch", "--show-current"]);
 
-    // Checkout the base branch (will fetch from origin if needed)
+    // Checkout the base branch (will fetch from origin if needed).
+    // For stacked PRs, base_branch is the previous PR's head branch
+    // rather than a protected branch.
     checkout_branch(base_branch)?;
 
     // Pull latest changes
@@ -359,7 +362,9 @@ fn create_pull_request(
     let words = edit_files_for_pr(filenames, next_pr_number, config);
     let deps_count = words.len();
 
-    let branch_name = format!("change/{}", words.join("-"));
+    // Include the PR number in the branch name so stacked PRs always get
+    // unique branches even when edits happen to touch the same words.
+    let branch_name = format!("change/pr{}-{}", next_pr_number, words.join("-"));
     git(&["checkout", "-b", &branch_name]);
 
     // Create logical conflict file if needed (after we're on the new branch)
@@ -387,6 +392,9 @@ fn create_pull_request(
     let mut title = format!("[{}] {}", base_branch, words.join(", "));
     if lc {
         title = format!("{} (logical-conflict)", title);
+    }
+    if let Some((position, depth)) = stack_info {
+        title = format!("{} (stack {}/{})", title, position, depth);
     }
 
     let mut body = config.pullrequest.body.to_string();
@@ -422,6 +430,13 @@ fn create_pull_request(
         first_letters.into_iter().collect::<Vec<_>>().join(",")
     ));
 
+    if let Some((position, depth)) = stack_info {
+        body.push_str(&format!(
+            "\n[stack]\nposition: {}\ndepth: {}\nbased on: {}\n",
+            position, depth, base_branch
+        ));
+    }
+
     let mut args: Vec<&str> = vec![
         "pr",
         "create",
@@ -441,7 +456,7 @@ fn create_pull_request(
     if dry_run {
         git(&["checkout", &current_branch]);
         git(&["pull"]);
-        return Ok(((last_pr + 1).to_string(), deps_count));
+        return Ok(((last_pr + 1).to_string(), deps_count, branch_name));
     }
 
     let result = try_gh(args.as_slice(), gh_token);
@@ -462,7 +477,7 @@ fn create_pull_request(
     let caps = re.captures(pr_url.trim()).unwrap();
     let pr_number = caps.get(2).map_or("", |m| m.as_str());
 
-    Ok((pr_number.to_string(), deps_count))
+    Ok((pr_number.to_string(), deps_count, branch_name))
 }
 
 fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
@@ -520,50 +535,84 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         );
     }
 
-    for token_index in 0..pull_requests_to_make {
-        let start = Instant::now();
-        let files = get_txt_files(config)?;
-        let mut filenames: Vec<String> = files
-            .into_iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect();
-
-        filenames.sort();
-
-        // Select token for this PR (round-robin)
-        let current_token = &github_tokens[token_index % github_tokens.len()];
-
-        // Select base branch for this PR (round-robin from protected_branches)
-        let protected_branches = &config.pullrequest.protected_branches;
-        let base_branch = &protected_branches[token_index % protected_branches.len()];
-
-        let pr_result = create_pull_request(
-            &filenames,
-            last_pr,
-            config,
-            cli.dry_run,
-            current_token,
-            base_branch,
-        );
-        if pr_result.is_err() {
-            println!("problem created pr for files: {:?}", filenames);
-            continue;
-        }
-        let duration = start.elapsed();
-        let (pr, deps_count) = pr_result.unwrap();
+    let stack_plan = config.plan_stacks(pull_requests_to_make);
+    if config.pullrequest.stacks_distribution.is_some() {
         println!(
-            "created pr: {} (target: {}, deps: {}) in {}s // waiting: {} mins",
-            pr,
-            base_branch,
-            deps_count,
-            duration.as_secs(),
-            (pull_request_every as f32 / 60.0)
+            "stack plan ({} stacks for {} PRs): {:?}",
+            stack_plan.len(),
+            pull_requests_to_make,
+            stack_plan
         );
-        thread::sleep(Duration::from_secs(pull_request_every) / 2);
-        enqueue(&pr, config, cli, current_token); // Change the argument type to accept a String
-        thread::sleep(Duration::from_secs(pull_request_every) / 2);
-        prs.push(pr);
-        last_pr += 1;
+    }
+
+    let mut pr_index = 0usize;
+    for (stack_index, depth) in stack_plan.iter().enumerate() {
+        let protected_branches = &config.pullrequest.protected_branches;
+        let protected_base = &protected_branches[stack_index % protected_branches.len()];
+
+        // For a stack, subsequent PRs base on the previous PR's branch.
+        let mut current_base = protected_base.clone();
+
+        for position in 1..=*depth {
+            let start = Instant::now();
+            let files = get_txt_files(config)?;
+            let mut filenames: Vec<String> = files
+                .into_iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect();
+
+            filenames.sort();
+
+            // Select token for this PR (round-robin)
+            let current_token = &github_tokens[pr_index % github_tokens.len()];
+
+            let stack_info = if *depth > 1 {
+                Some((position, *depth))
+            } else {
+                None
+            };
+
+            let pr_result = create_pull_request(
+                &filenames,
+                last_pr,
+                config,
+                cli.dry_run,
+                current_token,
+                &current_base,
+                stack_info,
+            );
+            if pr_result.is_err() {
+                println!("problem created pr for files: {:?}", filenames);
+                // Abort the rest of this stack: without this PR's branch,
+                // we can't base the next one on top of it.
+                break;
+            }
+            let duration = start.elapsed();
+            let (pr, deps_count, head_branch) = pr_result.unwrap();
+            let stack_tag = if *depth > 1 {
+                format!(" [stack {}/{}]", position, *depth)
+            } else {
+                String::new()
+            };
+            println!(
+                "created pr: {} (target: {}, deps: {}){} in {}s // waiting: {} mins",
+                pr,
+                current_base,
+                deps_count,
+                stack_tag,
+                duration.as_secs(),
+                (pull_request_every as f32 / 60.0)
+            );
+            thread::sleep(Duration::from_secs(pull_request_every) / 2);
+            enqueue(&pr, config, cli, current_token);
+            thread::sleep(Duration::from_secs(pull_request_every) / 2);
+            prs.push(pr);
+            last_pr += 1;
+            pr_index += 1;
+
+            // Next PR in this stack bases on the branch we just pushed.
+            current_base = head_branch;
+        }
     }
 
     Ok(())

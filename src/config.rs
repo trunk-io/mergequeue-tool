@@ -87,6 +87,14 @@ pub struct PullRequestConf {
     /// If not set, falls back to max_deps/max_impacted_deps behavior
     pub deps_distribution: Option<String>,
 
+    /// Distribution of stack depths for generated PRs.
+    /// Format: "0.8x1,0.2x2" means 80% of the PR budget is solo PRs (depth 1)
+    /// and 20% is grouped into 2-deep stacks. Each stack consumes N PR slots
+    /// from the total budget (requests_per_run / requests_per_hour).
+    /// Stacked PRs are created by basing each PR on the previous PR's branch.
+    /// If not set, all generated PRs are solo (depth 1).
+    pub stacks_distribution: Option<String>,
+
     #[config(default = 100)]
     pub logical_conflict_every: u32,
 
@@ -249,6 +257,127 @@ impl Conf {
         }
     }
 
+    /// Build a plan of stack depths for a given total PR budget.
+    /// Each entry in the returned vector is the depth of one stack,
+    /// and the sum of all entries equals `total_prs`.
+    /// If `stacks_distribution` is unset, returns `total_prs` entries of depth 1.
+    pub fn plan_stacks(&self, total_prs: usize) -> Vec<usize> {
+        let Some(ref distribution_str) = self.pullrequest.stacks_distribution else {
+            return vec![1; total_prs];
+        };
+
+        let distribution = self.parse_deps_distribution(distribution_str);
+        let total_weight: f64 = distribution.iter().map(|(prob, _)| prob).sum();
+        if total_weight <= 0.0 || distribution.is_empty() {
+            return vec![1; total_prs];
+        }
+
+        // Compute how many PR slots are allocated to each depth,
+        // then pack them into whole stacks. Leftover slots that can't
+        // form a full stack of the requested depth spill into depth 1.
+        let mut stacks: Vec<usize> = Vec::new();
+        let mut assigned_prs: usize = 0;
+
+        // Sort by depth descending so we prefer larger stacks first (more
+        // likely to honor the distribution's tail when rounding eats budget).
+        let mut depths: Vec<(f64, usize)> = distribution
+            .iter()
+            .filter_map(|(prob, count_str)| count_str.parse::<usize>().ok().map(|d| (*prob, d)))
+            .filter(|(_, d)| *d >= 1)
+            .collect();
+        depths.sort_by(|a, b| b.1.cmp(&a.1));
+
+        for (prob, depth) in &depths {
+            if *depth <= 1 {
+                continue;
+            }
+            let budget = ((prob / total_weight) * total_prs as f64).round() as usize;
+            let available = total_prs.saturating_sub(assigned_prs);
+            let budget = budget.min(available);
+            let num_stacks = budget / depth;
+            for _ in 0..num_stacks {
+                stacks.push(*depth);
+                assigned_prs += depth;
+            }
+        }
+
+        // Fill remaining budget with solo PRs (depth 1).
+        while assigned_prs < total_prs {
+            stacks.push(1);
+            assigned_prs += 1;
+        }
+
+        // Shuffle so stacks are interleaved with solo PRs in a stable order.
+        self.deterministic_shuffle_depths(&mut stacks);
+
+        stacks
+    }
+
+    /// Deterministic in-place shuffle for a slice of stack depths.
+    /// Mirrors `deterministic_shuffle` but operates on `usize` depths.
+    fn deterministic_shuffle_depths(&self, sequence: &mut [usize]) {
+        let len = sequence.len();
+        for i in 0..len {
+            let pseudo_random = ((i * 7 + 13) * 17 + i * 3) % len.max(1);
+            if pseudo_random != i {
+                sequence.swap(i, pseudo_random);
+            }
+        }
+    }
+
+    /// Validate the stacks distribution string format and values.
+    fn validate_stacks_distribution(&self, distribution_str: &str) -> Result<(), &'static str> {
+        if distribution_str.trim().is_empty() {
+            return Err("stacks_distribution cannot be empty");
+        }
+
+        let mut total_probability = 0.0;
+        let mut has_valid_entry = false;
+
+        for part in distribution_str.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+
+            let (prob_str, count_str) = part
+                .split_once('x')
+                .ok_or("invalid format in stacks_distribution (expected 'probabilityxdepth', e.g., '0.8x1')")?;
+
+            let probability = prob_str.trim().parse::<f64>().map_err(|_| {
+                "invalid probability format in stacks_distribution (must be a number)"
+            })?;
+
+            if probability <= 0.0 {
+                return Err("probabilities in stacks_distribution must be greater than 0");
+            }
+            if probability > 1.0 {
+                return Err("probabilities in stacks_distribution cannot be greater than 1.0");
+            }
+
+            let depth = count_str.trim().parse::<usize>().map_err(|_| {
+                "invalid depth format in stacks_distribution (must be a positive integer)"
+            })?;
+
+            if depth == 0 {
+                return Err("stack depth in stacks_distribution must be at least 1");
+            }
+
+            total_probability += probability;
+            has_valid_entry = true;
+        }
+
+        if !has_valid_entry {
+            return Err("stacks_distribution must contain at least one valid entry");
+        }
+
+        if (total_probability - 1.0).abs() > 0.001 {
+            return Err("probabilities in stacks_distribution must sum to 1.0");
+        }
+
+        Ok(())
+    }
+
     /// Validate the dependency distribution string format and values
     fn validate_deps_distribution(&self, distribution_str: &str) -> Result<(), &'static str> {
         if distribution_str.trim().is_empty() {
@@ -329,6 +458,11 @@ impl Conf {
         // Validate dependency distribution if set
         if let Some(ref distribution_str) = self.pullrequest.deps_distribution {
             self.validate_deps_distribution(distribution_str)?;
+        }
+
+        // Validate stacks distribution if set
+        if let Some(ref distribution_str) = self.pullrequest.stacks_distribution {
+            self.validate_stacks_distribution(distribution_str)?;
         }
 
         // Validate merge trigger configuration
