@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
@@ -142,14 +142,22 @@ fn get_repo_info() -> Result<(String, String), String> {
     }
 }
 
-fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
+/// `as_stack`: tip of a multi-PR stack — with `merge.trigger = comment`, posts `/trunk stack`
+/// instead of `merge.comment` (typically `/trunk merge`).
+fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str, as_stack: bool) {
+    const TRUNK_STACK_COMMENT: &str = "/trunk stack";
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
-            if config.merge.comment.is_empty() {
+            let body = if as_stack {
+                TRUNK_STACK_COMMENT
+            } else {
+                config.merge.comment.as_str()
+            };
+            if body.is_empty() {
                 eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
                 return;
             }
-            GitHub::comment(pr, &config.merge.comment, gh_token);
+            GitHub::comment(pr, body, gh_token);
         }
         EnqueueTrigger::Label => {
             if config.merge.labels.is_empty() {
@@ -312,29 +320,68 @@ fn checkout_branch(branch: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Highest PR number seen in recent `gh pr list` output.
+///
+/// Used to seed `last_pr` so the first PR in a run picks a sensible `next_pr_number` for
+/// dependency distribution and logical-conflict cadence (`edit_files_for_pr`, etc.). We take the
+/// max over a page of PRs because `--limit=1` alone is an arbitrary row (often most recently
+/// *updated*), not the largest number. Head branch names are synthetic and do not embed this.
 fn get_last_pr(gh_token: &str) -> u32 {
-    let result = try_gh(&["pr", "list", "--limit=1", "--json", "number"], gh_token);
+    let result = try_gh(
+        &[
+            "pr", "list", "--state", "all", "-L", "5000", "--json", "number",
+        ],
+        gh_token,
+    );
     if result.is_err() {
         return 0;
     }
     let json_str = result.unwrap();
 
-    let v: Value = serde_json::from_str(&json_str).expect("Failed to parse JSON");
+    let v: Value = serde_json::from_str(&json_str).unwrap_or(Value::Null);
 
-    let array = v.as_array();
-    match array {
-        Some(pr_array) => {
-            if pr_array.is_empty() {
-                // No PRs in the system. return 0
-                return 0;
+    v.as_array()
+        .map(|pr_array| {
+            pr_array
+                .iter()
+                .filter_map(|pr| pr["number"].as_u64())
+                .map(|n| n as u32)
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0)
+}
+
+/// `change/{first-word}-{HHMM}` in local wall time. Stacking stores the returned name in `current_base`.
+fn head_branch_from_first_word(first_changed: &str) -> String {
+    const MAX_SLUG: usize = 48;
+    let slug = slug_for_branch_segment(first_changed);
+    let slug: String = slug.chars().take(MAX_SLUG).collect();
+    let hm = Local::now().format("%H%M");
+    format!("change/{}-{}", slug, hm)
+}
+
+fn slug_for_branch_segment(s: &str) -> String {
+    let mut out: String = s
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else if c == '-' || c == '_' {
+                c
+            } else {
+                '-'
             }
-            let first = pr_array.first().cloned();
-            match first {
-                Some(pr) => pr["number"].as_u64().unwrap_or(0) as u32,
-                None => 0,
-            }
-        }
-        None => 0,
+        })
+        .collect();
+    while out.contains("--") {
+        out = out.replace("--", "-");
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        "edit".to_string()
+    } else {
+        out
     }
 }
 
@@ -362,9 +409,8 @@ fn create_pull_request(
     let words = edit_files_for_pr(filenames, next_pr_number, config);
     let deps_count = words.len();
 
-    // Include the PR number in the branch name so stacked PRs always get
-    // unique branches even when edits happen to touch the same words.
-    let branch_name = format!("change/pr{}-{}", next_pr_number, words.join("-"));
+    let first_word = words.first().map(|s| s.as_str()).unwrap_or("edit");
+    let branch_name = head_branch_from_first_word(first_word);
     git(&["checkout", "-b", &branch_name]);
 
     // Create logical conflict file if needed (after we're on the new branch)
@@ -389,12 +435,18 @@ fn create_pull_request(
         }
     }
 
-    let mut title = format!("[{}] {}", base_branch, words.join(", "));
+    // Solo PRs: keep merge target in the title (usually a short protected branch like main).
+    // Stacked PRs: base_branch is a generated `change/<word>-HHMM` branch — putting that in
+    // the title is noisy; stack position and the edited words are enough (full base is in the PR body).
+    let words_joined = words.join(", ");
+    let mut title = match stack_info {
+        Some((position, depth)) => {
+            format!("[stack {}/{}] {}", position, depth, words_joined)
+        }
+        None => format!("[{}] {}", base_branch, words_joined),
+    };
     if lc {
         title = format!("{} (logical-conflict)", title);
-    }
-    if let Some((position, depth)) = stack_info {
-        title = format!("{} (stack {}/{})", title, position, depth);
     }
 
     let mut body = config.pullrequest.body.to_string();
@@ -548,12 +600,30 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     let mut pr_index = 0usize;
     for (stack_index, depth) in stack_plan.iter().enumerate() {
         let protected_branches = &config.pullrequest.protected_branches;
-        let protected_base = &protected_branches[stack_index % protected_branches.len()];
+        let protected_base: String =
+            protected_branches[stack_index % protected_branches.len()].clone();
 
         // For a stack, subsequent PRs base on the previous PR's branch.
         let mut current_base = protected_base.clone();
 
+        println!(
+            "stack {} of {}: depth {} — first PR will target '{}'",
+            stack_index + 1,
+            stack_plan.len(),
+            depth,
+            protected_base
+        );
+
         for position in 1..=*depth {
+            // Defensive: the first PR in every stack must target the protected branch for this
+            // stack, never the previous stack's tip. If this ever fires, something regressed.
+            if position == 1 && current_base != protected_base {
+                eprintln!(
+                    "correcting stack base: expected '{}', was '{}'",
+                    protected_base, current_base
+                );
+                current_base = protected_base.clone();
+            }
             let start = Instant::now();
             let files = get_txt_files(config)?;
             let mut filenames: Vec<String> = files
@@ -604,18 +674,63 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 (pull_request_every as f32 / 60.0)
             );
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
-            enqueue(&pr, config, cli, current_token);
+            // For stacks, only enqueue the top PR (position == depth). Lower
+            // PRs can't merge on their own until the tip is resolved, so
+            // enqueueing them just churns the queue.
+            let is_top_of_stack = position == *depth;
+            if is_top_of_stack {
+                let as_stack = *depth > 1;
+                enqueue(&pr, config, cli, current_token, as_stack);
+            } else {
+                println!(
+                    "skipping enqueue for pr {} (stack {}/{})",
+                    pr, position, *depth
+                );
+            }
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
+            // Keep in sync with GitHub's assigned number for the next `last_pr + 1` edit sequence.
+            if let Ok(n) = pr.parse::<u32>() {
+                last_pr = n;
+            } else {
+                last_pr = last_pr.saturating_add(1);
+            }
             prs.push(pr);
-            last_pr += 1;
             pr_index += 1;
 
             // Next PR in this stack bases on the branch we just pushed.
             current_base = head_branch;
         }
+
+        // Leave git on the protected branch after each stack so the next stack always forks from
+        // a known base, even if the user started generate from another local branch.
+        if let Err(e) = checkout_branch(&protected_base) {
+            eprintln!(
+                "warning: could not check out protected branch '{}' after stack: {}",
+                protected_base, e
+            );
+        } else {
+            let _ = try_git(&["pull"]);
+        }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod branch_slug_tests {
+    use super::slug_for_branch_segment;
+
+    #[test]
+    fn slug_normalizes_word() {
+        assert_eq!(slug_for_branch_segment("Atlas"), "atlas");
+        assert_eq!(slug_for_branch_segment("Foo_bar"), "foo_bar");
+        assert_eq!(slug_for_branch_segment("a##b"), "a-b");
+    }
+
+    #[test]
+    fn slug_empty_becomes_edit() {
+        assert_eq!(slug_for_branch_segment("###"), "edit");
+    }
 }
 
 fn run() -> anyhow::Result<()> {
@@ -707,7 +822,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Enqueue(enqueue_args)) => {
             println!("Enqueuing PR: {}", enqueue_args.pr);
             let token = get_first_github_token(&cli);
-            enqueue(&enqueue_args.pr, &config, &cli, &token);
+            enqueue(&enqueue_args.pr, &config, &cli, &token, false);
             Ok(())
         }
         _ => {
