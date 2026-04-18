@@ -393,6 +393,8 @@ fn create_pull_request(
     gh_token: &str,
     base_branch: &str,
     stack_info: Option<(usize, usize)>,
+    /// GitHub PR number of the PR below this one in the stack (`None` for the stack base).
+    stack_parent_pr: Option<u32>,
 ) -> Result<(String, usize, String), String> {
     let current_branch = git(&["branch", "--show-current"]);
 
@@ -483,10 +485,17 @@ fn create_pull_request(
     ));
 
     if let Some((position, depth)) = stack_info {
-        body.push_str(&format!(
-            "\n[stack]\nposition: {}\ndepth: {}\nbased on: {}\n",
-            position, depth, base_branch
-        ));
+        body.push_str("\n[stack]\n");
+        body.push_str(&format!("position: {}\ndepth: {}\n", position, depth));
+        if position > 1 {
+            if let Some(pn) = stack_parent_pr {
+                body.push_str(&format!(
+                    "parent_branch: {}\nparent_pr: {}\n",
+                    base_branch, pn
+                ));
+            }
+        }
+        body.push_str(&format!("based on: {}\n", base_branch));
     }
 
     let mut args: Vec<&str> = vec![
@@ -605,6 +614,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
         // For a stack, subsequent PRs base on the previous PR's branch.
         let mut current_base = protected_base.clone();
+        let mut stack_parent_pr_number: Option<u32> = None;
 
         println!(
             "stack {} of {}: depth {} — first PR will target '{}'",
@@ -650,6 +660,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 current_token,
                 &current_base,
                 stack_info,
+                stack_parent_pr_number,
             );
             if pr_result.is_err() {
                 println!("problem created pr for files: {:?}", filenames);
@@ -691,8 +702,10 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             // Keep in sync with GitHub's assigned number for the next `last_pr + 1` edit sequence.
             if let Ok(n) = pr.parse::<u32>() {
                 last_pr = n;
+                stack_parent_pr_number = Some(n);
             } else {
                 last_pr = last_pr.saturating_add(1);
+                stack_parent_pr_number = None;
             }
             prs.push(pr);
             pr_index += 1;
