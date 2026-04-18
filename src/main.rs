@@ -604,7 +604,15 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 (pull_request_every as f32 / 60.0)
             );
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
-            enqueue(&pr, config, cli, current_token);
+            // For stacks, only enqueue the top PR (position == depth). Lower
+            // PRs can't merge on their own until the tip is resolved, so
+            // enqueueing them just churns the queue.
+            let is_top_of_stack = position == *depth;
+            if is_top_of_stack {
+                enqueue(&pr, config, cli, current_token);
+            } else {
+                println!("skipping enqueue for pr {} (stack {}/{})", pr, position, *depth);
+            }
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
             prs.push(pr);
             last_pr += 1;
