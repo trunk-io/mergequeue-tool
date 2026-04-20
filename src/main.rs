@@ -357,10 +357,13 @@ fn head_branch_for_stack(stack_id: &str, position: usize) -> String {
     format!("stack-change/{}-{}", stack_id, position)
 }
 
-/// Random 5-digit hex identifier for a stack (e.g. `a1f3c`).
+/// Random 5-char `[a-z0-9]` identifier for a stack (e.g. `a1f3c`).
 fn new_stack_id() -> String {
-    let n: u32 = rand::thread_rng().gen_range(0..=0xF_FFFF);
-    format!("{:05x}", n)
+    const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    (0..5)
+        .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+        .collect()
 }
 
 /// Build and open one generated PR (new branch, edits, commit, push, `gh pr create`).
@@ -588,7 +591,6 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     }
 
     let mut pr_index = 0usize;
-    let mut used_stack_ids: HashSet<String> = HashSet::new();
     for (stack_index, depth) in stack_plan.iter().enumerate() {
         let protected_branches = &config.pullrequest.protected_branches;
         let protected_base: String =
@@ -598,13 +600,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let mut current_base = protected_base.clone();
         let mut stack_parent_pr_number: Option<u32> = None;
 
-        // Unique 5-hex-digit id shared by every PR branch in this stack.
-        let stack_id = loop {
-            let candidate = new_stack_id();
-            if used_stack_ids.insert(candidate.clone()) {
-                break candidate;
-            }
-        };
+        // 5-char [a-z0-9] id shared by every PR branch in this stack (~60M possibilities).
+        let stack_id = new_stack_id();
 
         println!(
             "stack {} ({}) of {}: depth {} — first PR will target '{}'",
@@ -733,10 +730,12 @@ mod stack_branch_tests {
     }
 
     #[test]
-    fn stack_id_is_five_hex_digits() {
+    fn stack_id_is_five_lowercase_alphanumeric() {
         let id = new_stack_id();
         assert_eq!(id.len(), 5);
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 }
 
