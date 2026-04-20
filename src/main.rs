@@ -682,11 +682,6 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             if is_top_of_stack {
                 let as_stack = *depth > 1;
                 enqueue(&pr, config, cli, current_token, as_stack);
-            } else {
-                println!(
-                    "skipping enqueue for pr {} (stack {}/{})",
-                    pr, position, *depth
-                );
             }
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
             // Keep in sync with GitHub's assigned number for the next `last_pr + 1` edit sequence.
