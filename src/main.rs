@@ -142,17 +142,22 @@ fn get_repo_info() -> Result<(String, String), String> {
     }
 }
 
-/// `as_stack`: tip of a multi-PR stack — with `merge.trigger = comment`, posts `/trunk stack`
-/// instead of `merge.comment` (typically `/trunk merge`).
-fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str, as_stack: bool) {
-    const TRUNK_STACK_COMMENT: &str = "/trunk stack";
+/// `stack_prs`: when `Some` (and contains more than one PR), this PR is the tip
+/// of a multi-PR stack. With `merge.trigger = comment`, we post
+/// `/trunk stack --title "Stack of #A, #B, ..."` instead of `merge.comment`
+/// (typically `/trunk merge`).
+fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str, stack_prs: Option<&[String]>) {
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
-            let body = if as_stack {
-                TRUNK_STACK_COMMENT
-            } else {
-                config.merge.comment.as_str()
-            };
+            let stack_body = stack_prs
+                .filter(|prs| prs.len() > 1)
+                .map(|prs| {
+                    let list: Vec<String> = prs.iter().map(|p| format!("#{}", p)).collect();
+                    format!("/trunk stack --title \"Stack of {}\"", list.join(", "))
+                });
+            let body: &str = stack_body
+                .as_deref()
+                .unwrap_or(config.merge.comment.as_str());
             if body.is_empty() {
                 eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
                 return;
@@ -605,6 +610,9 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 
         // For a stack, subsequent PRs base on the previous PR's branch.
         let mut current_base = protected_base.clone();
+        // PRs created in this stack so far, in bottom-to-top order. Used to
+        // build the `/trunk stack --title "Stack of #A, #B"` comment on the tip.
+        let mut stack_prs: Vec<String> = Vec::new();
 
         println!(
             "stack {} of {}: depth {} — first PR will target '{}'",
@@ -673,14 +681,19 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 duration.as_secs(),
                 (pull_request_every as f32 / 60.0)
             );
+            stack_prs.push(pr.clone());
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
             // For stacks, only enqueue the top PR (position == depth). Lower
             // PRs can't merge on their own until the tip is resolved, so
             // enqueueing them just churns the queue.
             let is_top_of_stack = position == *depth;
             if is_top_of_stack {
-                let as_stack = *depth > 1;
-                enqueue(&pr, config, cli, current_token, as_stack);
+                let stack_ref = if *depth > 1 {
+                    Some(stack_prs.as_slice())
+                } else {
+                    None
+                };
+                enqueue(&pr, config, cli, current_token, stack_ref);
             } else {
                 println!(
                     "skipping enqueue for pr {} (stack {}/{})",
@@ -822,7 +835,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Enqueue(enqueue_args)) => {
             println!("Enqueuing PR: {}", enqueue_args.pr);
             let token = get_first_github_token(&cli);
-            enqueue(&enqueue_args.pr, &config, &cli, &token, false);
+            enqueue(&enqueue_args.pr, &config, &cli, &token, None);
             Ok(())
         }
         _ => {
