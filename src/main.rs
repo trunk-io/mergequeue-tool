@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
@@ -352,37 +352,18 @@ fn get_last_pr(gh_token: &str) -> u32 {
         .unwrap_or(0)
 }
 
-/// `change/{first-word}-{HHMM}` in local wall time. Stacking stores the returned name in `current_base`.
-fn head_branch_from_first_word(first_changed: &str) -> String {
-    const MAX_SLUG: usize = 48;
-    let slug = slug_for_branch_segment(first_changed);
-    let slug: String = slug.chars().take(MAX_SLUG).collect();
-    let hm = Local::now().format("%H%M");
-    format!("change/{}-{}", slug, hm)
+/// `stack-change/{stack_id}-{position}`. Stacking stores the returned name in `current_base`.
+fn head_branch_for_stack(stack_id: &str, position: usize) -> String {
+    format!("stack-change/{}-{}", stack_id, position)
 }
 
-fn slug_for_branch_segment(s: &str) -> String {
-    let mut out: String = s
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c.to_ascii_lowercase()
-            } else if c == '-' || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    while out.contains("--") {
-        out = out.replace("--", "-");
-    }
-    let out = out.trim_matches('-').to_string();
-    if out.is_empty() {
-        "edit".to_string()
-    } else {
-        out
-    }
+/// Random 5-char `[a-z0-9]` identifier for a stack (e.g. `a1f3c`).
+fn new_stack_id() -> String {
+    const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    (0..5)
+        .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+        .collect()
 }
 
 /// Build and open one generated PR (new branch, edits, commit, push, `gh pr create`).
@@ -395,6 +376,8 @@ fn create_pull_request(
     base_branch: &str,
     stack_info: Option<(usize, usize)>,
     stack_parent_pr: Option<u32>,
+    stack_id: &str,
+    position: usize,
 ) -> Result<(String, usize, String), String> {
     // When stacking above the base PR, pass that parent's GitHub PR number (None at stack bottom).
     let current_branch = git(&["branch", "--show-current"]);
@@ -412,8 +395,7 @@ fn create_pull_request(
     let words = edit_files_for_pr(filenames, next_pr_number, config);
     let deps_count = words.len();
 
-    let first_word = words.first().map(|s| s.as_str()).unwrap_or("edit");
-    let branch_name = head_branch_from_first_word(first_word);
+    let branch_name = head_branch_for_stack(stack_id, position);
     git(&["checkout", "-b", &branch_name]);
 
     // Create logical conflict file if needed (after we're on the new branch)
@@ -439,8 +421,8 @@ fn create_pull_request(
     }
 
     // Solo PRs: keep merge target in the title (usually a short protected branch like main).
-    // Stacked PRs: base_branch is a generated `change/<word>-HHMM` branch — putting that in
-    // the title is noisy; stack position and the edited words are enough (full base is in the PR body).
+    // Stacked PRs: base_branch is a generated `stack-change/{id}-{position}` branch — putting that
+    // in the title is noisy; stack position and the edited words are enough (full base is in the PR body).
     let words_joined = words.join(", ");
     let mut title = match stack_info {
         Some((position, depth)) => {
@@ -618,17 +600,13 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         let mut current_base = protected_base.clone();
         let mut stack_parent_pr_number: Option<u32> = None;
 
-        println!(
-            "stack {} of {}: depth {} — first PR will target '{}'",
-            stack_index + 1,
-            stack_plan.len(),
-            depth,
-            protected_base
-        );
+        // 5-char [a-z0-9] id shared by every PR branch in this stack (~60M possibilities).
+        let stack_id = new_stack_id();
 
         println!(
-            "stack {} of {}: depth {} — first PR will target '{}'",
+            "stack {} ({}) of {}: depth {} — first PR will target '{}'",
             stack_index + 1,
+            stack_id,
             stack_plan.len(),
             depth,
             protected_base
@@ -671,6 +649,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 &current_base,
                 stack_info,
                 stack_parent_pr_number,
+                &stack_id,
+                position,
             );
             if pr_result.is_err() {
                 println!("problem created pr for files: {:?}", filenames);
@@ -740,19 +720,22 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
-mod branch_slug_tests {
-    use super::slug_for_branch_segment;
+mod stack_branch_tests {
+    use super::{head_branch_for_stack, new_stack_id};
 
     #[test]
-    fn slug_normalizes_word() {
-        assert_eq!(slug_for_branch_segment("Atlas"), "atlas");
-        assert_eq!(slug_for_branch_segment("Foo_bar"), "foo_bar");
-        assert_eq!(slug_for_branch_segment("a##b"), "a-b");
+    fn branch_uses_stack_id_and_position() {
+        assert_eq!(head_branch_for_stack("a1f3c", 1), "stack-change/a1f3c-1");
+        assert_eq!(head_branch_for_stack("00000", 4), "stack-change/00000-4");
     }
 
     #[test]
-    fn slug_empty_becomes_edit() {
-        assert_eq!(slug_for_branch_segment("###"), "edit");
+    fn stack_id_is_five_lowercase_alphanumeric() {
+        let id = new_stack_id();
+        assert_eq!(id.len(), 5);
+        assert!(id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 }
 
