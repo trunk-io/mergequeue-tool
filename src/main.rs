@@ -472,10 +472,7 @@ fn create_pull_request(
         body.push_str(&format!("position: {}\ndepth: {}\n", position, depth));
         if position > 1 {
             if let Some(pn) = stack_parent_pr {
-                body.push_str(&format!(
-                    "parent_branch: {}\nparent_pr: {}\n",
-                    base_branch, pn
-                ));
+                body.push_str(&format!("parent_pr: {}\n", pn));
             }
         }
         body.push_str(&format!("based on: {}\n", base_branch));
