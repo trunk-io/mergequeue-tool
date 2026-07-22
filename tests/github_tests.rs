@@ -1,5 +1,40 @@
-use gen::github::GitHubAction;
+use gen::github::{GitHub, GitHubAction};
 use gen::trunk::get_targets;
+
+#[test]
+fn test_stack_create_args_orders_prs_bottom_to_top() {
+    let args = GitHub::stack_create_args("trunk-io", "mergequeue", &[101, 102, 103]);
+    assert_eq!(
+        args,
+        vec![
+            "api",
+            "--method",
+            "POST",
+            "repos/trunk-io/mergequeue/stacks",
+            "-F",
+            "pull_requests[]=101",
+            "-F",
+            "pull_requests[]=102",
+            "-F",
+            "pull_requests[]=103",
+        ]
+    );
+}
+
+#[test]
+fn test_create_stack_rejects_fewer_than_two_prs() {
+    let result = GitHub::create_stack("owner", "repo", &[42], "token");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("between 2 and 100"));
+}
+
+#[test]
+fn test_create_stack_rejects_more_than_hundred_prs() {
+    let prs: Vec<u32> = (1..=101).collect();
+    let result = GitHub::create_stack("owner", "repo", &prs, "token");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("between 2 and 100"));
+}
 
 #[test]
 fn test_parse_deps_from_pr_body() {

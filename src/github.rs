@@ -17,6 +17,44 @@ impl GitHub {
         try_gh(&["pr", "edit", pr, "--add-label", label], token).expect("Failed to add label to PR")
     }
 
+    /// Build the `gh api` argument list for creating a stack from PR numbers
+    /// ordered bottom to top. `-F` sends each value as a JSON integer and the
+    /// `[]` suffix appends it to the `pull_requests` array in the request body.
+    pub fn stack_create_args(owner: &str, repo: &str, pr_numbers: &[u32]) -> Vec<String> {
+        let mut args = vec![
+            "api".to_string(),
+            "--method".to_string(),
+            "POST".to_string(),
+            format!("repos/{}/{}/stacks", owner, repo),
+        ];
+        for pr in pr_numbers {
+            args.push("-F".to_string());
+            args.push(format!("pull_requests[]={}", pr));
+        }
+        args
+    }
+
+    /// Register a chain of pull requests as a stack via GitHub's stacks API
+    /// (`POST /repos/{owner}/{repo}/stacks`). `pr_numbers` must be ordered
+    /// bottom to top, and each PR's base ref must be the previous PR's head
+    /// ref. The API accepts between 2 and 100 pull requests per stack.
+    pub fn create_stack(
+        owner: &str,
+        repo: &str,
+        pr_numbers: &[u32],
+        token: &str,
+    ) -> Result<String, String> {
+        if pr_numbers.len() < 2 || pr_numbers.len() > 100 {
+            return Err(format!(
+                "stacks require between 2 and 100 pull requests, got {}",
+                pr_numbers.len()
+            ));
+        }
+        let args = Self::stack_create_args(owner, repo, pr_numbers);
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        try_gh(&arg_refs, token)
+    }
+
     pub fn get_pr_base_branch(pr: &str, gh_token: &str) -> String {
         let result = try_gh(&["pr", "view", pr, "--json", "baseRefName"], gh_token);
         if result.is_err() {

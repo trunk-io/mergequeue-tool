@@ -524,6 +524,34 @@ fn create_pull_request(
     Ok((pr_number.to_string(), deps_count, branch_name))
 }
 
+/// Register a fully-created stack with GitHub's stacks API, passing PR numbers
+/// ordered bottom to top. Failures are logged but not fatal: the PRs are
+/// already chained branch-on-branch, so generation continues even when the
+/// stacks API is unavailable (e.g. the feature is not enabled on the repo).
+fn register_stack(pr_numbers: &[u32], depth: usize, dry_run: bool, gh_token: &str) {
+    if dry_run {
+        println!("dry-run: would register gh stack for PRs {:?}", pr_numbers);
+        return;
+    }
+    if pr_numbers.len() != depth {
+        eprintln!(
+            "skipping gh stack registration: expected {} PR numbers, have {:?}",
+            depth, pr_numbers
+        );
+        return;
+    }
+    match get_repo_info() {
+        Ok((owner, repo)) => match GitHub::create_stack(&owner, &repo, pr_numbers, gh_token) {
+            Ok(_) => println!("registered gh stack for PRs {:?}", pr_numbers),
+            Err(e) => eprintln!(
+                "failed to register gh stack for PRs {:?}: {}",
+                pr_numbers, e
+            ),
+        },
+        Err(e) => eprintln!("failed to register gh stack: {}", e),
+    }
+}
+
 fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
     if config.is_generator_disabled() {
         println!("generator is disabled pull requests per hour is set to 0");
@@ -599,6 +627,8 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         // For a stack, subsequent PRs base on the previous PR's branch.
         let mut current_base = protected_base.clone();
         let mut stack_parent_pr_number: Option<u32> = None;
+        // PR numbers created for this stack, bottom to top, for stack registration.
+        let mut stack_pr_numbers: Vec<u32> = Vec::new();
 
         // 5-char [a-z0-9] id shared by every PR branch in this stack (~60M possibilities).
         let stack_id = new_stack_id();
@@ -660,6 +690,10 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             }
             let duration = start.elapsed();
             let (pr, deps_count, head_branch) = pr_result.unwrap();
+            let pr_number = pr.parse::<u32>().ok();
+            if let Some(n) = pr_number {
+                stack_pr_numbers.push(n);
+            }
             let stack_tag = if *depth > 1 {
                 format!(" [stack {}/{}]", position, *depth)
             } else {
@@ -681,6 +715,11 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             let is_top_of_stack = position == *depth;
             if is_top_of_stack {
                 let as_stack = *depth > 1;
+                // Register the stack with GitHub once every PR in it exists,
+                // before enqueueing the tip so the queue sees a complete stack.
+                if as_stack {
+                    register_stack(&stack_pr_numbers, *depth, cli.dry_run, current_token);
+                }
                 enqueue(&pr, config, cli, current_token, as_stack);
             } else {
                 println!(
@@ -690,7 +729,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             }
             thread::sleep(Duration::from_secs(pull_request_every) / 2);
             // Keep in sync with GitHub's assigned number for the next `last_pr + 1` edit sequence.
-            if let Ok(n) = pr.parse::<u32>() {
+            if let Some(n) = pr_number {
                 last_pr = n;
                 stack_parent_pr_number = Some(n);
             } else {
