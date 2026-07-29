@@ -142,17 +142,12 @@ fn get_repo_info() -> Result<(String, String), String> {
     }
 }
 
-/// `as_stack`: tip of a multi-PR stack — with `merge.trigger = comment`, posts `/trunk stack`
-/// instead of `merge.comment` (typically `/trunk merge`).
-fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str, as_stack: bool) {
-    const TRUNK_STACK_COMMENT: &str = "/trunk stack";
+/// Enqueues a PR, including the tip of a multi-PR stack — with `merge.trigger = comment`,
+/// stacks post `merge.comment` (typically `/trunk merge`) just like any other PR.
+fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
-            let body = if as_stack {
-                TRUNK_STACK_COMMENT
-            } else {
-                config.merge.comment.as_str()
-            };
+            let body = config.merge.comment.as_str();
             if body.is_empty() {
                 eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
                 return;
@@ -714,13 +709,12 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             // enqueueing them just churns the queue.
             let is_top_of_stack = position == *depth;
             if is_top_of_stack {
-                let as_stack = *depth > 1;
                 // Register the stack with GitHub once every PR in it exists,
                 // before enqueueing the tip so the queue sees a complete stack.
-                if as_stack {
+                if *depth > 1 {
                     register_stack(&stack_pr_numbers, *depth, cli.dry_run, current_token);
                 }
-                enqueue(&pr, config, cli, current_token, as_stack);
+                enqueue(&pr, config, cli, current_token);
             } else {
                 println!(
                     "skipping enqueue for pr {} (stack {}/{})",
@@ -867,7 +861,7 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Enqueue(enqueue_args)) => {
             println!("Enqueuing PR: {}", enqueue_args.pr);
             let token = get_first_github_token(&cli);
-            enqueue(&enqueue_args.pr, &config, &cli, &token, false);
+            enqueue(&enqueue_args.pr, &config, &cli, &token);
             Ok(())
         }
         _ => {
