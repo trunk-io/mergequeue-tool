@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -61,7 +61,7 @@ jobs:
             mq-${{ github.event.inputs.release_tag }}-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release mq
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.target }}
           path: mq-${{ github.event.inputs.release_tag }}-${{ matrix.target }}.tar.gz
@@ -72,15 +72,15 @@ jobs:
     needs: [build]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: trunk install
-        uses: trunk-io/trunk-action/install@v1
+        uses: trunk-io/trunk-action/install@04ba50e7658c81db7356da96657e6e77f220bfa3 # v1.3.1
         with:
           tools: gh
 
       - id: download
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: dist
           merge-multiple: true

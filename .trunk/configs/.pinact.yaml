@@ -1,0 +1,8 @@
+version: 3
+rules:
+  # dtolnay/rust-toolchain is referenced by moving channel refs (e.g. @stable),
+  # which cannot be pinned to a release-tag SHA. Leave it unpinned.
+  - ignore: true
+    conditions:
+      - expr: |
+          ActionRepoFullName == "dtolnay/rust-toolchain"
