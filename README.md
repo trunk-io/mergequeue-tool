@@ -27,6 +27,47 @@ Options:
   -V, --version                 Print version
 ```
 
+#### Installing `mq`
+
+Each release publishes a self-contained `mq` binary per platform, already marked
+executable inside the archive — so there is **no `chmod` step** after extracting.
+
+Release assets (attached to every [release](https://github.com/trunk-io/mergequeue-tool/releases)):
+
+| Platform | Asset |
+| --- | --- |
+| Linux x86_64 | `mq-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux arm64 | `mq-<version>-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS (Apple Silicon) | `mq-<version>-aarch64-apple-darwin.tar.gz` |
+
+A `SHA256SUMS.txt` is also attached for verification.
+
+**GitHub Actions (recommended)** — pin the asset by name and let the action extract it:
+
+```yaml
+- uses: robinraju/release-downloader@v1.13
+  with:
+    repository: trunk-io/mergequeue-tool
+    latest: true
+    preRelease: false
+    # Pick the archive for your runner's platform:
+    fileName: mq-*-x86_64-unknown-linux-gnu.tar.gz
+    extract: true
+- run: ./mq --version
+```
+
+> Do not use `tarBall: true` — that downloads GitHub's source archive (no `mq` binary).
+> Select the release asset with `fileName` instead.
+
+**Local / shell** (uses the GitHub CLI to grab the latest release for your platform):
+
+```bash
+gh release download --repo trunk-io/mergequeue-tool \
+  --pattern 'mq-*-x86_64-unknown-linux-gnu.tar.gz'
+tar xzf mq-*-x86_64-unknown-linux-gnu.tar.gz
+./mq --version
+```
+
 #### Generate
 
 Running `mq generate` will attempt to generate pull requests at the configured rate. Generate can
