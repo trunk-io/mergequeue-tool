@@ -34,11 +34,11 @@ executable inside the archive — so there is **no `chmod` step** after extracti
 
 Release assets (attached to every [release](https://github.com/trunk-io/mergequeue-tool/releases)):
 
-| Platform | Asset |
-| --- | --- |
-| Linux x86_64 | `mq-<version>-x86_64-unknown-linux-gnu.tar.gz` |
-| Linux arm64 | `mq-<version>-aarch64-unknown-linux-gnu.tar.gz` |
-| macOS (Apple Silicon) | `mq-<version>-aarch64-apple-darwin.tar.gz` |
+| Platform              | Asset                                           |
+| --------------------- | ----------------------------------------------- |
+| Linux x86_64          | `mq-<version>-x86_64-unknown-linux-gnu.tar.gz`  |
+| Linux arm64           | `mq-<version>-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS (Apple Silicon) | `mq-<version>-aarch64-apple-darwin.tar.gz`      |
 
 A `SHA256SUMS.txt` is also attached for verification.
 
