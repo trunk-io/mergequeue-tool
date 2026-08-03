@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -52,10 +52,19 @@ jobs:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - uses: actions/upload-artifact@v4
+      - name: Package binary
+        run: |
+          # Make the binary executable so it is ready to run straight out of the
+          # archive (tar preserves the mode, so no chmod is needed downstream).
+          chmod 0755 target/${{ matrix.target }}/release/mq
+          tar czvf \
+            mq-${{ github.event.inputs.release_tag }}-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release mq
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/mq
+          path: mq-${{ github.event.inputs.release_tag }}-${{ matrix.target }}.tar.gz
 
   tag_and_release:
     name: Tag and Release [ ${{ github.event.inputs.release_tag }} ]
@@ -63,39 +72,28 @@ jobs:
     needs: [build]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: trunk install
-        uses: trunk-io/trunk-action/install@v1
+        uses: trunk-io/trunk-action/install@04ba50e7658c81db7356da96657e6e77f220bfa3 # v1.3.1
         with:
           tools: gh
 
       - id: download
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
-          path: build
+          path: dist
+          merge-multiple: true
 
-      - name: Compress binaries
-        run: |
-          for target in $(ls build)
-          do
-            chmod u+x build/${target}/mq
-            if [[ "${target}" == *"apple-darwin"* ]]; then
-              # macOS binaries use zip format
-              cd build/${target}
-              zip ../mq-${{ github.event.inputs.release_tag }}-${target}.zip mq
-              cd ../..
-            else
-              # Linux binaries use tar.gz format
-              tar czvf \
-                build/mq-${{ github.event.inputs.release_tag }}-${target}.tar.gz \
-                -C build/${target} mq
-            fi
-          done
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum mq-*.tar.gz > SHA256SUMS.txt
 
-      - name: Create GH release and upload binary
+      - name: Create GH release and upload binaries
+        working-directory: dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create --target ${{ github.ref }}  \
-            ${{ github.event.inputs.release_tag }} ./build/*.{tar.gz,zip} --generate-notes --prerelease
+            ${{ github.event.inputs.release_tag }} \
+            mq-*.tar.gz SHA256SUMS.txt --generate-notes --prerelease
