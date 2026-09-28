@@ -227,8 +227,13 @@ fn simulate_test(config: &Conf) -> bool {
         return true;
     }
 
-    println!("sleeping for {} seconds", config.sleep_duration().as_secs());
-    thread::sleep(config.sleep_duration());
+    let sleep = config.sleep_duration();
+    println!(
+        "sleeping for {:.1} seconds (sleep_for: {})",
+        sleep.as_secs_f64(),
+        config.test.sleep_for
+    );
+    thread::sleep(sleep);
 
     if !config.pullrequest.logical_conflict_file.is_empty()
         && Path::new(&config.pullrequest.logical_conflict_file).exists()
@@ -436,10 +441,7 @@ fn create_pull_request(
         "logical conflict every: {}\n",
         config.pullrequest.logical_conflict_every
     ));
-    body.push_str(&format!(
-        "sleep for: {}s\n",
-        config.sleep_duration().as_secs()
-    ));
+    body.push_str(&format!("sleep for: {}\n", config.test.sleep_for));
     body.push_str(&format!(
         "close stale after: {}\n",
         config.pullrequest.close_stale_after

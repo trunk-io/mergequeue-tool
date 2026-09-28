@@ -1,7 +1,10 @@
 use confique::toml::{self, FormatOptions};
 use confique::Config;
 use parse_duration::parse;
+use rand::Rng;
+use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "lowercase")]
@@ -116,6 +119,7 @@ pub struct TestConf {
     #[config(default = 0.1)]
     pub flake_rate: f32,
 
+    /// A fixed duration ("1 second") or a range ("10-15 minutes") sampled on a bell curve
     #[config(default = "1 second")]
     pub sleep_for: String,
 }
@@ -151,8 +155,19 @@ impl Conf {
         println!("{}", default_config);
     }
 
-    pub fn sleep_duration(&self) -> std::time::Duration {
-        parse(&self.test.sleep_for).expect("Failed to parse sleep_for into a Duration")
+    /// The (min, max) bounds of `sleep_for`; a fixed duration yields min == max.
+    pub fn sleep_range(&self) -> Result<(Duration, Duration), &'static str> {
+        parse_duration_range(&self.test.sleep_for)
+    }
+
+    /// A test duration drawn from a normal distribution centred on the middle of the
+    /// `sleep_for` range, with the range spanning ±3σ. Draws outside the range are
+    /// redrawn rather than clamped so the bounds don't collect a spike of samples.
+    pub fn sleep_duration(&self) -> Duration {
+        let (min, max) = self
+            .sleep_range()
+            .expect("Failed to parse sleep_for into a Duration");
+        sample_bell_curve(min, max, &mut rand::thread_rng())
     }
 
     pub fn is_generator_disabled(&self) -> bool {
@@ -447,9 +462,7 @@ impl Conf {
             return Err("flake_rate must be between 0.0 and 1.0");
         }
 
-        if parse(&self.test.sleep_for).is_err() {
-            return Err("sleep_for must be a valid duration string");
-        }
+        self.sleep_range()?;
 
         if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
             return Err("cannot set both requests_per_hour and requests_per_run");
@@ -489,5 +502,44 @@ impl Conf {
         }
 
         Ok(())
+    }
+}
+
+/// Parses "1 second", "10 minutes - 15 minutes" or "10-15 minutes"; in the last form the
+/// lower bound borrows the upper bound's unit.
+pub fn parse_duration_range(value: &str) -> Result<(Duration, Duration), &'static str> {
+    let Some((low, high)) = value.split_once('-') else {
+        let fixed = parse(value).map_err(|_| "sleep_for must be a valid duration string")?;
+        return Ok((fixed, fixed));
+    };
+    let (low, high) = (low.trim(), high.trim());
+
+    let low = if low.parse::<f64>().is_ok() {
+        let unit = high.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+        format!("{}{}", low, unit)
+    } else {
+        low.to_string()
+    };
+
+    let invalid = "sleep_for range must look like '10-15 minutes' or '10 minutes - 15 minutes'";
+    let min = parse(&low).map_err(|_| invalid)?;
+    let max = parse(high).map_err(|_| invalid)?;
+    if min > max {
+        return Err("sleep_for range minimum must not exceed its maximum");
+    }
+    Ok((min, max))
+}
+
+pub fn sample_bell_curve<R: Rng + ?Sized>(min: Duration, max: Duration, rng: &mut R) -> Duration {
+    if min == max {
+        return min;
+    }
+    let (lo, hi) = (min.as_secs_f64(), max.as_secs_f64());
+    let normal = Normal::new((lo + hi) / 2.0, (hi - lo) / 6.0).expect("finite, positive σ");
+    loop {
+        let secs = normal.sample(rng);
+        if (lo..=hi).contains(&secs) {
+            return Duration::from_secs_f64(secs);
+        }
     }
 }

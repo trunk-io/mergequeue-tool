@@ -204,6 +204,10 @@ assuming `mq generate` is called every 10 minutes.
 # Default value: 0.1
 #flake_rate = 0.1
 
+# How long each simulated test runs. Either a fixed duration ("1 second") or a
+# range ("10-15 minutes", "90 seconds - 2 minutes"). A range is sampled per test
+# run on a bell curve centred on its midpoint, with the range spanning ±3σ, so
+# most runs land near the middle and none fall outside the bounds.
 # Default value: "1 second"
 #sleep_for = "1 second"
 
