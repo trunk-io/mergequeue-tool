@@ -1,4 +1,9 @@
-use gen::config::{Conf, MergeConf, PullRequestConf, TestConf};
+use gen::config::{
+    parse_duration_range, sample_bell_curve, Conf, MergeConf, PullRequestConf, TestConf,
+};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use std::time::Duration;
 
 mod test_utils;
 use test_utils::run_mq_with_config_and_args;
@@ -584,4 +589,67 @@ trigger = "api"
     assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
     // Should output full JSON config
     assert!(stdout.contains("\"trunk\""), "Should contain trunk section");
+}
+
+#[test]
+fn test_sleep_for_fixed_duration() {
+    let (min, max) = parse_duration_range("1 second").unwrap();
+    assert_eq!(min, Duration::from_secs(1));
+    assert_eq!(max, Duration::from_secs(1));
+}
+
+#[test]
+fn test_sleep_for_range_forms() {
+    let expected = (Duration::from_secs(600), Duration::from_secs(900));
+    assert_eq!(parse_duration_range("10-15min").unwrap(), expected);
+    assert_eq!(parse_duration_range("10-15 minutes").unwrap(), expected);
+    assert_eq!(
+        parse_duration_range("10 minutes - 15 minutes").unwrap(),
+        expected
+    );
+    assert_eq!(
+        parse_duration_range("90 seconds-2 minutes").unwrap(),
+        (Duration::from_secs(90), Duration::from_secs(120))
+    );
+}
+
+#[test]
+fn test_sleep_for_range_validation() {
+    assert!(parse_duration_range("15-10 minutes").is_err());
+    assert!(parse_duration_range("ten-15 minutes").is_err());
+    assert!(parse_duration_range("10-").is_err());
+
+    let mut config = create_test_config(PullRequestConf::default());
+    config.test.sleep_for = "15-10 minutes".to_string();
+    assert!(config.is_valid(None).is_err());
+    config.test.sleep_for = "10-15 minutes".to_string();
+    assert!(config.is_valid(None).is_ok());
+}
+
+#[test]
+fn test_sleep_for_samples_bell_curve_within_range() {
+    let (min, max) = (Duration::from_secs(600), Duration::from_secs(900));
+    let mut rng = StdRng::seed_from_u64(42);
+    let samples: Vec<f64> = (0..10_000)
+        .map(|_| sample_bell_curve(min, max, &mut rng).as_secs_f64())
+        .collect();
+
+    assert!(samples.iter().all(|s| (600.0..=900.0).contains(s)));
+
+    let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+    assert!((mean - 750.0).abs() < 2.0, "mean {mean}");
+
+    // ~68% of a normal distribution sits within ±1σ (σ = 50s here).
+    let within_one_sigma = samples
+        .iter()
+        .filter(|s| (700.0..=800.0).contains(*s))
+        .count();
+    let share = within_one_sigma as f64 / samples.len() as f64;
+    assert!((0.66..0.71).contains(&share), "share within 1σ {share}");
+}
+
+#[test]
+fn test_sleep_for_fixed_duration_is_not_sampled() {
+    let d = Duration::from_secs(5);
+    assert_eq!(sample_bell_curve(d, d, &mut StdRng::seed_from_u64(1)), d);
 }

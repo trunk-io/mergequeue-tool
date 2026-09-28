@@ -66,6 +66,7 @@ close_stale_after = "4 hours"
 # Default value: 0.1
 flake_rate = 0.1
 
+# Fixed duration or a range ("10-15 minutes") sampled on a bell curve
 # Default value: "1 second"
 sleep_for = "1 second"
 
