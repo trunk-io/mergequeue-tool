@@ -1,5 +1,6 @@
 use gen::config::{
-    parse_duration_range, sample_bell_curve, Conf, MergeConf, PullRequestConf, TestConf,
+    parse_duration_range, sample_bell_curve, Conf, Forge, GitLabConf, MergeConf, PullRequestConf,
+    TestConf,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -652,4 +653,48 @@ fn test_sleep_for_samples_bell_curve_within_range() {
 fn test_sleep_for_fixed_duration_is_not_sampled() {
     let d = Duration::from_secs(5);
     assert_eq!(sample_bell_curve(d, d, &mut StdRng::seed_from_u64(1)), d);
+}
+
+#[test]
+fn test_forge_defaults_to_github() {
+    let config = create_test_config(PullRequestConf::default());
+    assert_eq!(config.forge, Forge::GitHub);
+    assert_eq!(config.forge_host().unwrap(), "github.com");
+}
+
+#[test]
+fn test_gitlab_forge_host_keeps_non_default_port() {
+    let mut config = create_test_config(PullRequestConf::default());
+    config.forge = Forge::GitLab;
+    config.gitlab = GitLabConf {
+        url: "https://gitlab.example.com:8443/".to_string(),
+    };
+    assert_eq!(config.forge_host().unwrap(), "gitlab.example.com:8443");
+
+    config.gitlab.url = "https://gitlab.com".to_string();
+    assert_eq!(config.forge_host().unwrap(), "gitlab.com");
+}
+
+#[test]
+fn test_gitlab_forge_rejects_invalid_url() {
+    let mut config = create_test_config(PullRequestConf::default());
+    config.forge = Forge::GitLab;
+    config.gitlab.url = "gitlab.com".to_string();
+    assert!(config.is_valid(None).is_err());
+}
+
+#[test]
+fn test_config_reads_gitlab_forge() {
+    let config = r#"
+forge = "gitlab"
+
+[merge]
+trigger = "api"
+"#;
+
+    let (exit_code, stdout, stderr) =
+        run_mq_with_config_and_args(config, "config", &["gitlab.url"]);
+
+    assert_eq!(exit_code, 0, "Should succeed. stderr: {}", stderr);
+    assert_eq!(stdout.trim(), "https://gitlab.com");
 }
