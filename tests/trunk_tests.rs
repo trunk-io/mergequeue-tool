@@ -152,6 +152,7 @@ fn test_api_trigger_trunk_token_validation() {
     let cli_empty_token = Cli {
         subcommand: None,
         gh_token: vec![],
+        gitlab_token: vec![],
         trunk_token: String::new(), // Empty token
         dry_run: false,
     };
@@ -160,6 +161,7 @@ fn test_api_trigger_trunk_token_validation() {
     let cli_valid_token = Cli {
         subcommand: None,
         gh_token: vec![],
+        gitlab_token: vec![],
         trunk_token: "valid_token_123".to_string(),
         dry_run: false,
     };

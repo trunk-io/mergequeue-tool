@@ -1,6 +1,8 @@
 use crate::cli::Cli;
-use crate::config::Conf;
+use crate::config::{Conf, Forge};
 use crate::github::{GitHub, GitHubAction};
+use crate::gitlab::GitLab;
+use crate::repo::RepoRef;
 use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use serde_json::json;
@@ -62,7 +64,7 @@ mod tests {
     }
 }
 
-pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
+pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: Option<&str>) {
     // Check for TRUNK_TOKEN at runtime
     if cli.trunk_token.is_empty() {
         eprintln!("TRUNK_TOKEN is required for upload-targets subcommand");
@@ -70,6 +72,118 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         std::process::exit(1);
     }
 
+    match (config.forge, github_json_path) {
+        (Forge::GitLab, _) => upload_targets_gitlab(config, cli),
+        (Forge::GitHub, Some(path)) => upload_targets_github(config, cli, path),
+        (Forge::GitHub, None) => {
+            eprintln!("--github-json is required for upload-targets on GitHub");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// The parts of a GitLab merge request pipeline that `upload-targets` needs.
+#[derive(Debug, PartialEq)]
+pub struct GitLabMergeRequestEnv {
+    pub project_path: String,
+    pub iid: u32,
+    pub sha: String,
+    pub target_branch: String,
+    /// `None` when GitLab did not provide the description or truncated it.
+    pub description: Option<String>,
+}
+
+impl GitLabMergeRequestEnv {
+    /// Read GitLab's predefined CI variables through `var`.
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let required = |name: &str| {
+            var(name)
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| format!("{} is not set; run this in a merge request pipeline", name))
+        };
+        let iid = required("CI_MERGE_REQUEST_IID")?;
+        // In merged-results pipelines CI_COMMIT_SHA is the merge commit, not the MR head.
+        let sha = var("CI_MERGE_REQUEST_SOURCE_BRANCH_SHA")
+            .filter(|v| !v.is_empty())
+            .map_or_else(|| required("CI_COMMIT_SHA"), Ok)?;
+        let truncated = var("CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED").as_deref() == Some("true");
+        Ok(GitLabMergeRequestEnv {
+            project_path: required("CI_PROJECT_PATH")?,
+            iid: iid
+                .parse()
+                .map_err(|_| format!("CI_MERGE_REQUEST_IID is not a number: {}", iid))?,
+            sha,
+            target_branch: required("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")?,
+            description: var("CI_MERGE_REQUEST_DESCRIPTION").filter(|_| !truncated),
+        })
+    }
+}
+
+fn upload_targets_gitlab(config: &Conf, cli: &Cli) {
+    let mr =
+        GitLabMergeRequestEnv::from_vars(|name| std::env::var(name).ok()).unwrap_or_else(|e| {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        });
+
+    let description = match mr.description.clone() {
+        Some(d) => d,
+        None => {
+            let Some(token) = cli.get_gitlab_tokens().into_iter().next() else {
+                eprintln!("CI_MERGE_REQUEST_DESCRIPTION is missing or truncated; provide --gitlab-token or GITLAB_TOKEN to read it from the API");
+                std::process::exit(1);
+            };
+            let gl = GitLab::new(&config.gitlab.url, &mr.project_path, &token);
+            let fetched = gl
+                .merge_request(&mr.iid.to_string())
+                .expect("Failed to read merge request");
+            fetched["description"].as_str().unwrap_or("").to_string()
+        }
+    };
+
+    let impacted_targets = get_targets(&description);
+    if impacted_targets.is_empty() {
+        println!("No deps listed in MR description like deps=[a,b,c] - skipping upload");
+        return;
+    }
+
+    let host = config.forge_host().expect("validated by Conf::is_valid");
+    let repo = RepoRef::from_path(&host, &mr.project_path).unwrap_or_else(|| {
+        eprintln!(
+            "CI_PROJECT_PATH is not a group/project path: {}",
+            mr.project_path
+        );
+        std::process::exit(1);
+    });
+    println!(
+        "Uploading {} impacted targets: {:?} (target branch: {})",
+        impacted_targets.len(),
+        impacted_targets,
+        mr.target_branch
+    );
+    report_upload(post_targets(
+        &repo,
+        mr.iid,
+        &mr.sha,
+        &mr.target_branch,
+        impacted_targets,
+        &config.trunk.api,
+        &cli.trunk_token,
+    ));
+}
+
+fn report_upload(result: Result<(), Box<dyn std::error::Error>>) {
+    match result {
+        Ok(_) => println!("Successfully uploaded impacted targets"),
+        Err(e) => {
+            eprintln!("Failed to upload impacted targets: {:?}", e);
+            // Exit with error code to fail the workflow
+            std::process::exit(1);
+        }
+    }
+}
+
+fn upload_targets_github(config: &Conf, cli: &Cli, github_json_path: &str) {
     let github_json = fs::read_to_string(github_json_path).expect("Failed to read file");
     let ga = GitHubAction::from_json(&github_json);
 
@@ -110,30 +224,24 @@ pub fn upload_targets(config: &Conf, cli: &Cli, github_json_path: &str) {
         target_branch
     );
 
-    let result = post_targets(
-        ga.repo_owner(),
-        ga.repo_name(),
+    let repo = RepoRef {
+        host: "github.com".to_string(),
+        owner: ga.repo_owner().to_string(),
+        name: ga.repo_name().to_string(),
+    };
+    report_upload(post_targets(
+        &repo,
         ga.event.pull_request.number,
         &ga.event.pull_request.head.sha,
         &target_branch,
         impacted_targets,
         &config.trunk.api,
         &cli.trunk_token,
-    );
-
-    match result {
-        Ok(_) => println!("Successfully uploaded impacted targets"),
-        Err(e) => {
-            eprintln!("Failed to upload impacted targets: {:?}", e);
-            // Exit with error code to fail the workflow
-            std::process::exit(1);
-        }
-    }
+    ));
 }
 
 pub fn post_targets(
-    repo_owner: &str,
-    repo_name: &str,
+    repo: &RepoRef,
     pr_number: u32,
     pr_sha: &str,
     target_branch: &str,
@@ -149,9 +257,9 @@ pub fn post_targets(
 
     let body = json!({
         "repo": {
-            "host": "github.com",
-            "owner": repo_owner,
-            "name": repo_name,
+            "host": repo.host,
+            "owner": repo.owner,
+            "name": repo.name,
         },
         "pr": {
             "number": pr_number,
@@ -177,7 +285,7 @@ pub fn post_targets(
         // Show debug info on errors
         println!("API request failed:");
         println!("  URL: https://{}:443/v1/setImpactedTargets", api);
-        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  Repository: {}/{}", repo.host, repo.path());
         println!("  PR Number: {}", pr_number);
         println!("  Target Branch: {}", target_branch);
         println!("  Impacted Targets: {:?}", impacted_targets);
@@ -210,8 +318,7 @@ pub fn post_targets(
 }
 
 pub fn submit_pull_request(
-    repo_owner: &str,
-    repo_name: &str,
+    repo: &RepoRef,
     pr_number: u32,
     target_branch: &str,
     priority: Option<&str>,
@@ -226,7 +333,7 @@ pub fn submit_pull_request(
     // Handle dry-run mode
     if cli.dry_run {
         println!("dry-run: would submit to Trunk API:");
-        println!("  - Repository: {}/{}", repo_owner, repo_name);
+        println!("  - Repository: {}/{}", repo.host, repo.path());
         println!("  - PR Number: {}", pr_number);
         println!("  - Target Branch: {}", target_branch);
         if let Some(priority_value) = priority {
@@ -247,9 +354,9 @@ pub fn submit_pull_request(
 
     let mut body = json!({
         "repo": {
-            "host": "github.com",
-            "owner": repo_owner,
-            "name": repo_name,
+            "host": repo.host,
+            "owner": repo.owner,
+            "name": repo.name,
         },
         "pr": {
             "number": pr_number,
@@ -281,7 +388,7 @@ pub fn submit_pull_request(
         println!("API request failed:");
         println!("  URL: {}", url);
         println!("  Request body: {}", body_str);
-        println!("  Repository: {}/{}", repo_owner, repo_name);
+        println!("  Repository: {}/{}", repo.host, repo.path());
         println!("  PR Number: {}", pr_number);
         println!("  Target Branch: {}", target_branch);
 

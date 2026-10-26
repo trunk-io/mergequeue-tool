@@ -14,6 +14,14 @@ pub enum Mode {
     ParallelQueue,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Forge {
+    #[default]
+    GitHub,
+    GitLab,
+}
+
 #[derive(Config, Serialize, Default)]
 pub struct Conf {
     #[config(default = "singlequeue")]
@@ -22,8 +30,15 @@ pub struct Conf {
     #[config(default = "none")]
     pub build: String,
 
+    /// Where the repository is hosted: "github" or "gitlab"
+    #[config(default = "github")]
+    pub forge: Forge,
+
     #[config(nested)]
     pub trunk: TrunkConf,
+
+    #[config(nested)]
+    pub gitlab: GitLabConf,
 
     #[config(nested)]
     pub git: GitConf,
@@ -42,6 +57,14 @@ pub struct Conf {
 pub struct TrunkConf {
     #[config(default = "api.trunk.io")]
     pub api: String,
+}
+
+#[derive(Config, Serialize, Default)]
+pub struct GitLabConf {
+    /// Root URL of the GitLab instance, used for API calls and as the repo host
+    /// reported to Trunk
+    #[config(default = "https://gitlab.com")]
+    pub url: String,
 }
 
 #[derive(Config, Serialize, Default)]
@@ -168,6 +191,23 @@ impl Conf {
             .sleep_range()
             .expect("Failed to parse sleep_for into a Duration");
         sample_bell_curve(min, max, &mut rand::thread_rng())
+    }
+
+    /// The repository host Trunk knows this repo by: `github.com`, or the GitLab
+    /// instance's host including any non-default port.
+    pub fn forge_host(&self) -> Result<String, &'static str> {
+        match self.forge {
+            Forge::GitHub => Ok("github.com".to_string()),
+            Forge::GitLab => {
+                let url = reqwest::Url::parse(&self.gitlab.url)
+                    .map_err(|_| "gitlab.url must be a URL such as https://gitlab.com")?;
+                let host = url.host_str().ok_or("gitlab.url must include a host")?;
+                Ok(match url.port() {
+                    Some(port) => format!("{}:{}", host, port),
+                    None => host.to_string(),
+                })
+            }
+        }
     }
 
     pub fn is_generator_disabled(&self) -> bool {
@@ -463,6 +503,7 @@ impl Conf {
         }
 
         self.sleep_range()?;
+        self.forge_host()?;
 
         if self.pullrequest.requests_per_hour > 0 && self.pullrequest.requests_per_run > 0 {
             return Err("cannot set both requests_per_hour and requests_per_run");
