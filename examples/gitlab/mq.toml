@@ -1,0 +1,33 @@
+forge = "gitlab"
+
+# Trunk's public setImpactedTargets API does not resolve GitLab projects yet, and a
+# parallel queue waits on impacted targets, so keep a single queue until it does.
+mode = "singlequeue"
+build = "folders"
+
+[gitlab]
+url = "https://gitlab.com"
+
+[trunk]
+api = "api.trunk-staging.io"
+
+[git]
+name = "trunk bot"
+email = "bot@trunk.io"
+
+[test]
+flake_rate = 0.1
+sleep_for = "5m"
+
+[pullrequest]
+requests_per_hour = 20
+run_generate_for = "30 minutes"
+change_code_path = "bazel"
+protected_branches = ["main"]
+deps_distribution = "0.55x1,0.35x2,0.09x3,0.01xALL"
+logical_conflict_every = 90
+logical_conflict_file = "logical-conflict.txt"
+close_stale_after = "48 hours"
+
+[merge]
+comment = "/trunk merge"

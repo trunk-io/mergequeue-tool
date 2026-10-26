@@ -10,6 +10,13 @@ pub struct Cli {
     #[arg(help = "GitHub token (can be specified multiple times)", global = true)]
     pub gh_token: Vec<String>,
 
+    #[clap(long = "gitlab-token")]
+    #[arg(
+        help = "GitLab token with api scope (can be specified multiple times)",
+        global = true
+    )]
+    pub gitlab_token: Vec<String>,
+
     #[clap(long = "trunk-token", env = "TRUNK_TOKEN")]
     #[arg(default_value_t = String::from(""), global = true)]
     pub trunk_token: String,
@@ -33,6 +40,19 @@ impl Cli {
             }
         }
 
+        tokens
+    }
+
+    /// Get all GitLab tokens (from CLI args, or the GITLAB_TOKEN environment variable)
+    pub fn get_gitlab_tokens(&self) -> Vec<String> {
+        let mut tokens = self.gitlab_token.clone();
+        if tokens.is_empty() {
+            if let Ok(env_token) = std::env::var("GITLAB_TOKEN") {
+                if !env_token.is_empty() {
+                    tokens.push(env_token);
+                }
+            }
+        }
         tokens
     }
 }
@@ -61,9 +81,10 @@ pub enum Subcommands {
 
 #[derive(Parser, Debug)]
 pub struct UploadTargets {
-    // Path to file that contains github-json block
+    /// Path to file that contains github-json block. Required on GitHub; on GitLab
+    /// the merge request is read from the CI_* variables of a merge request pipeline.
     #[clap(long = "github-json")]
-    pub github_json: String,
+    pub github_json: Option<String>,
 
     /// Optional: Path to JSON file containing array of targets to upload directly
     /// If provided, targets will be read from this file instead of extracting from PR body

@@ -21,6 +21,7 @@ Commands:
 
 Options:
       --gh-token <GH_TOKEN>     GitHub token (can be specified multiple times, or use GH_TOKEN env var)
+      --gitlab-token <TOKEN>    GitLab token with api scope (can be specified multiple times, or use GITLAB_TOKEN env var)
       --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
       --dry-run                 Show what would be done without executing
   -h, --help                    Print help
@@ -67,6 +68,28 @@ gh release download --repo trunk-io/mergequeue-tool \
 tar xzf mq-*-x86_64-unknown-linux-gnu.tar.gz
 ./mq --version
 ```
+
+#### GitLab
+
+Set `forge = "gitlab"` (and `gitlab.url` for a self-hosted instance) to drive a merge queue on a
+GitLab project. `mq` then opens merge requests through the GitLab REST API instead of `gh`, comments
+`merge.comment` (e.g. `/trunk merge`) on them, and reports the project to Trunk by its full
+namespace path, subgroups included. Tokens come from `--gitlab-token` or `GITLAB_TOKEN` and need
+the `api` and `write_repository` scopes.
+
+[`examples/gitlab`](examples/gitlab) has a `.gitlab-ci.yml` and `mq.toml` equivalent to
+[merge-demo/mergequeue-st](https://github.com/merge-demo/mergequeue-st). To use it:
+
+- Make the token's user at least a Developer on the project, so Trunk accepts its `/trunk merge`.
+- Add `test` to the queue's required statuses. GitLab has no required checks for Trunk to read,
+  and without required statuses a test run passes as soon as it starts.
+- Schedule a pipeline on the default branch to run the `factory` job.
+
+On GitLab, `upload-targets` reads the merge request from the `CI_MERGE_REQUEST_*` variables of a
+merge request pipeline, so `--github-json` is not needed. Trunk's public `setImpactedTargets` and
+`submitPullRequest` endpoints do not resolve GitLab projects yet. Until they do, keep
+`mode = "singlequeue"` and `merge.trigger = "comment"`. GitLab has no stacks API, so stacked MRs
+are chained by target branch only.
 
 #### Generate
 
@@ -126,9 +149,19 @@ assuming `mq generate` is called every 10 minutes.
 # Default value: "none"
 #build = "none"
 
+# Where the repository is hosted: "github" or "gitlab"
+# Default value: "github"
+#forge = "github"
+
 [trunk]
 # Default value: "api.trunk.io"
 #api = "api.trunk.io"
+
+[gitlab]
+# Root URL of the GitLab instance, used for API calls and as the repo host
+# reported to Trunk
+# Default value: "https://gitlab.com"
+#url = "https://gitlab.com"
 
 [git]
 # Default value: "Jane Doe"

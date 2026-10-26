@@ -7,25 +7,61 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use confique::Config;
 use gen::cli::{Cli, Subcommands};
-use gen::config::{Conf, EnqueueTrigger};
+use gen::config::{Conf, EnqueueTrigger, Forge};
 use gen::config_error::handle_config_load_error;
 use gen::edit::edit_files_for_pr;
+use gen::forge::{ForgeClient, Mergeability};
 use gen::github::GitHub;
-use gen::process::{git, run_cmd, try_gh, try_git, try_git_quiet};
+use gen::gitlab::GitLab;
+use gen::process::{git, run_cmd, try_git, try_git_quiet};
+use gen::repo::{self, RepoRef};
 use gen::trunk::{submit_pull_request, upload_targets};
 use rand::Rng;
-use regex::Regex;
 use serde_json::{to_string_pretty, Value};
 use walkdir::WalkDir;
 
-/// Get the first GitHub token or exit with an error
-fn get_first_github_token(cli: &Cli) -> String {
-    let github_tokens = cli.get_github_tokens();
-    if github_tokens.is_empty() {
-        eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
+/// One client per configured token, for round-robin use; exits if there are none.
+fn forge_clients(config: &Conf, cli: &Cli) -> Vec<ForgeClient> {
+    let clients: Vec<ForgeClient> = match config.forge {
+        Forge::GitHub => cli
+            .get_github_tokens()
+            .into_iter()
+            .map(|token| ForgeClient::GitHub { token })
+            .collect(),
+        Forge::GitLab => {
+            let project = repo::origin().unwrap_or_else(|e| {
+                eprintln!("Failed to get repository information: {}", e);
+                std::process::exit(1);
+            });
+            cli.get_gitlab_tokens()
+                .into_iter()
+                .map(|token| {
+                    ForgeClient::GitLab(GitLab::new(&config.gitlab.url, &project.path(), &token))
+                })
+                .collect()
+        }
+    };
+    if clients.is_empty() {
+        match config.forge {
+            Forge::GitHub => eprintln!(
+                "No GitHub tokens provided. Use --gh-token to specify at least one token."
+            ),
+            Forge::GitLab => eprintln!(
+                "No GitLab tokens provided. Use --gitlab-token or GITLAB_TOKEN to specify at least one token."
+            ),
+        }
         std::process::exit(1);
     }
-    github_tokens[0].clone()
+    clients
+}
+
+/// The repo as Trunk's API identifies it: origin's path on the configured forge host.
+fn trunk_repo(config: &Conf) -> Result<RepoRef, String> {
+    let origin = repo::origin()?;
+    Ok(RepoRef {
+        host: config.forge_host()?,
+        ..origin
+    })
 }
 
 fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
@@ -43,81 +79,61 @@ fn get_txt_files(config: &Conf) -> std::io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-fn housekeeping(config: &Conf, gh_token: &str) {
+fn housekeeping(config: &Conf, forge: &ForgeClient) {
     for _ in 0..3 {
-        let json_str = try_gh(
-            &[
-                "pr",
-                "list",
-                "--limit=1000",
-                "--json",
-                "number,mergeable,comments",
-            ],
-            gh_token,
-        )
-        .expect("Failed to list PRs");
-        let v: Value = serde_json::from_str(&json_str).expect("Failed to parse JSON");
+        let requests = forge.open_requests().expect("Failed to list PRs");
 
         let mut has_unknown = false;
         let mut requeued: HashSet<String> = HashSet::new();
-        if let Some(array) = v.as_array() {
-            for item in array {
-                let mergeable = item["mergeable"].as_str().unwrap_or("");
-                let pr = item["number"].as_i64().unwrap_or(0).to_string();
-                match mergeable {
-                    "UNKNOWN" => {
-                        has_unknown = true;
+        for item in &requests {
+            let pr = &item.number;
+            match item.mergeability {
+                Mergeability::Unknown => {
+                    has_unknown = true;
+                }
+                Mergeability::Conflicting => {
+                    forge.close(pr);
+                    println!("closed pr: {} (had merge conflicts)", pr);
+                }
+                Mergeability::Mergeable => {
+                    if requeued.contains(pr) {
+                        continue;
                     }
-                    "CONFLICTING" => {
-                        GitHub::close(&pr, gh_token);
-                        println!("closed pr: {} (had merge conflicts)", &pr);
-                    }
-                    "MERGEABLE" => {
-                        if requeued.contains(&pr) {
-                            continue;
+                    'comment: for comment in item.comments.iter() {
+                        let body = comment.body.as_str();
+                        let created_at_str = comment.created_at.as_str();
+
+                        if created_at_str.is_empty() {
+                            continue 'comment;
                         }
-                        let comments = item["comments"].as_array().unwrap();
-                        'comment: for comment in comments.iter() {
-                            let body = comment["body"].as_str().unwrap_or("");
-                            let created_at_str = comment["createdAt"].as_str().unwrap_or("");
 
-                            if created_at_str.is_empty() {
-                                continue 'comment;
-                            }
+                        let stale_age = Utc::now() - config.close_stale_after_duration();
+                        let created_at = DateTime::parse_from_rfc3339(created_at_str)
+                            .expect("Unable to parse datetime")
+                            .with_timezone(&Utc);
 
-                            let stale_age = Utc::now() - config.close_stale_after_duration();
-                            let created_at = DateTime::parse_from_rfc3339(created_at_str)
-                                .expect("Unable to parse datetime")
-                                .with_timezone(&Utc);
-
-                            if created_at > stale_age {
-                                continue 'comment; // The datetime was less than stale age
-                            }
-
-                            if config
-                                .pullrequest
-                                .detect_stale_pr_comments
-                                .iter()
-                                .any(|s| body.contains(s))
-                            {
-                                //enqueue(&pr, config, cli, gh_token);
-                                GitHub::close(&pr, gh_token);
-                                println!("closed stale pr: {}", &pr);
-                                requeued.insert(pr.to_owned());
-                            }
+                        if created_at > stale_age {
+                            continue 'comment; // The datetime was less than stale age
                         }
-                    }
-                    _ => {
-                        // handle other states
+
+                        if config
+                            .pullrequest
+                            .detect_stale_pr_comments
+                            .iter()
+                            .any(|s| body.contains(s))
+                        {
+                            forge.close(pr);
+                            println!("closed stale pr: {}", pr);
+                            requeued.insert(pr.to_owned());
+                            break 'comment;
+                        }
                     }
                 }
             }
+        }
 
-            if has_unknown {
-                thread::sleep(Duration::from_secs(10));
-            } else {
-                return;
-            }
+        if has_unknown {
+            thread::sleep(Duration::from_secs(10));
         } else {
             return;
         }
@@ -129,22 +145,9 @@ fn configure_git(config: &Conf) {
     git(&["config", "user.name", &config.git.name]);
 }
 
-fn get_repo_info() -> Result<(String, String), String> {
-    let remote_url = git(&["config", "--get", "remote.origin.url"]);
-    let re = Regex::new(r"[:/]([^/]+)/([^/]+?)(?:\.git)?$").unwrap();
-
-    if let Some(caps) = re.captures(&remote_url) {
-        let owner = caps.get(1).map_or("", |m| m.as_str()).to_string();
-        let name = caps.get(2).map_or("", |m| m.as_str()).to_string();
-        Ok((owner, name))
-    } else {
-        Err("Could not parse repository owner and name from remote URL".to_string())
-    }
-}
-
 /// Enqueues a PR, including the tip of a multi-PR stack — with `merge.trigger = comment`,
 /// stacks post `merge.comment` (typically `/trunk merge`) just like any other PR.
-fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
+fn enqueue(pr: &str, config: &Conf, cli: &Cli, forge: &ForgeClient) {
     match config.merge.trigger {
         EnqueueTrigger::Comment => {
             let body = config.merge.comment.as_str();
@@ -152,7 +155,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                 eprintln!("Cannot enqueue PR because merge 'trigger' is set to comment but no comment was provided");
                 return;
             }
-            GitHub::comment(pr, body, gh_token);
+            forge.comment(pr, body);
         }
         EnqueueTrigger::Label => {
             if config.merge.labels.is_empty() {
@@ -161,7 +164,7 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
             }
             let labels: Vec<&str> = config.merge.labels.split(',').map(|s| s.trim()).collect();
             for lbl in &labels {
-                GitHub::add_label(pr, lbl, gh_token);
+                forge.add_label(pr, lbl);
             }
         }
         EnqueueTrigger::Run => {
@@ -178,8 +181,8 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
 
         EnqueueTrigger::Api => {
             // TRUNK_TOKEN will be checked at runtime in submit_pull_request
-            match get_repo_info() {
-                Ok((owner, name)) => {
+            match trunk_repo(config) {
+                Ok(repo) => {
                     let pr_number: u32 = match pr.parse() {
                         Ok(num) => num,
                         Err(_) => {
@@ -188,11 +191,10 @@ fn enqueue(pr: &str, config: &Conf, cli: &Cli, gh_token: &str) {
                         }
                     };
                     // Get the PR's base branch
-                    let target_branch = GitHub::get_pr_base_branch(pr, gh_token);
+                    let target_branch = forge.base_branch(pr);
                     println!("Enqueuing PR {} targeting branch: {}", pr, target_branch);
                     match submit_pull_request(
-                        &owner,
-                        &name,
+                        &repo,
                         pr_number,
                         &target_branch,
                         None, // Default priority, could be made configurable
@@ -320,38 +322,6 @@ fn checkout_branch(branch: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Highest PR number seen in recent `gh pr list` output.
-///
-/// Used to seed `last_pr` so the first PR in a run picks a sensible `next_pr_number` for
-/// dependency distribution and logical-conflict cadence (`edit_files_for_pr`, etc.). We take the
-/// max over a page of PRs because `--limit=1` alone is an arbitrary row (often most recently
-/// *updated*), not the largest number. Head branch names are synthetic and do not embed this.
-fn get_last_pr(gh_token: &str) -> u32 {
-    let result = try_gh(
-        &[
-            "pr", "list", "--state", "all", "-L", "5000", "--json", "number",
-        ],
-        gh_token,
-    );
-    if result.is_err() {
-        return 0;
-    }
-    let json_str = result.unwrap();
-
-    let v: Value = serde_json::from_str(&json_str).unwrap_or(Value::Null);
-
-    v.as_array()
-        .map(|pr_array| {
-            pr_array
-                .iter()
-                .filter_map(|pr| pr["number"].as_u64())
-                .map(|n| n as u32)
-                .max()
-                .unwrap_or(0)
-        })
-        .unwrap_or(0)
-}
-
 /// `stack-change/{stack_id}-{position}`. Stacking stores the returned name in `current_base`.
 fn head_branch_for_stack(stack_id: &str, position: usize) -> String {
     format!("stack-change/{}-{}", stack_id, position)
@@ -366,13 +336,13 @@ fn new_stack_id() -> String {
         .collect()
 }
 
-/// Build and open one generated PR (new branch, edits, commit, push, `gh pr create`).
+/// Build and open one generated PR (new branch, edits, commit, push, open the PR/MR).
 fn create_pull_request(
     filenames: &[String],
     last_pr: u32,
     config: &Conf,
     dry_run: bool,
-    gh_token: &str,
+    forge: &ForgeClient,
     base_branch: &str,
     stack_info: Option<(usize, usize)>,
     stack_parent_pr: Option<u32>,
@@ -478,21 +448,13 @@ fn create_pull_request(
         body.push_str(&format!("based on: {}\n", base_branch));
     }
 
-    let mut args: Vec<&str> = vec![
-        "pr",
-        "create",
-        "--title",
-        &title,
-        "--body",
-        &body,
-        "--base",
-        base_branch,
-    ];
-
-    for lbl in config.pullrequest.labels.split(',') {
-        args.push("--label");
-        args.push(lbl.trim());
-    }
+    let labels: Vec<&str> = config
+        .pullrequest
+        .labels
+        .split(',')
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
 
     if dry_run {
         git(&["checkout", &current_branch]);
@@ -500,7 +462,7 @@ fn create_pull_request(
         return Ok(((last_pr + 1).to_string(), deps_count, branch_name));
     }
 
-    let result = try_gh(args.as_slice(), gh_token);
+    let result = forge.create_request(&branch_name, base_branch, &title, &body, &labels);
 
     // no matter what is result - need to reset checkout and clean up
     git(&["checkout", &current_branch]);
@@ -509,23 +471,24 @@ fn create_pull_request(
     let _ = try_git(&["clean", "-fd"]);
     git(&["pull"]);
 
-    if result.is_err() {
-        return Err("could not create pull request".to_owned());
+    match result {
+        Ok(pr_number) => Ok((pr_number, deps_count, branch_name)),
+        Err(e) => Err(format!("could not create pull request: {}", e)),
     }
-
-    let pr_url = result.unwrap();
-    let re = Regex::new(r"(.*)/pull/(\d+)$").unwrap();
-    let caps = re.captures(pr_url.trim()).unwrap();
-    let pr_number = caps.get(2).map_or("", |m| m.as_str());
-
-    Ok((pr_number.to_string(), deps_count, branch_name))
 }
 
 /// Register a fully-created stack with GitHub's stacks API, passing PR numbers
 /// ordered bottom to top. Failures are logged but not fatal: the PRs are
 /// already chained branch-on-branch, so generation continues even when the
 /// stacks API is unavailable (e.g. the feature is not enabled on the repo).
-fn register_stack(pr_numbers: &[u32], depth: usize, dry_run: bool, gh_token: &str) {
+fn register_stack(pr_numbers: &[u32], depth: usize, dry_run: bool, forge: &ForgeClient) {
+    let ForgeClient::GitHub { token: gh_token } = forge else {
+        println!(
+            "GitLab has no stacks API; MRs {:?} are chained by target branch only",
+            pr_numbers
+        );
+        return;
+    };
     if dry_run {
         println!("dry-run: would register gh stack for PRs {:?}", pr_numbers);
         return;
@@ -537,8 +500,9 @@ fn register_stack(pr_numbers: &[u32], depth: usize, dry_run: bool, gh_token: &st
         );
         return;
     }
-    match get_repo_info() {
-        Ok((owner, repo)) => match GitHub::create_stack(&owner, &repo, pr_numbers, gh_token) {
+    match repo::origin() {
+        Ok(origin) => match GitHub::create_stack(&origin.owner, &origin.name, pr_numbers, gh_token)
+        {
             Ok(_) => println!("registered gh stack for PRs {:?}", pr_numbers),
             Err(e) => eprintln!(
                 "failed to register gh stack for PRs {:?}: {}",
@@ -583,14 +547,10 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         );
     }
 
-    // Seed `last_pr` from GitHub so the *first* PR in this run uses a realistic `last_pr + 1` for
-    // `edit_files_for_pr` / logical-conflict cadence; later PRs use the number returned from `gh pr create`.
-    let github_tokens = cli.get_github_tokens();
-    if github_tokens.is_empty() {
-        eprintln!("No GitHub tokens provided. Use --gh-token to specify at least one token.");
-        std::process::exit(1);
-    }
-    let mut last_pr = get_last_pr(&github_tokens[0]);
+    // Seed `last_pr` from the forge so the *first* PR in this run uses a realistic `last_pr + 1` for
+    // `edit_files_for_pr` / logical-conflict cadence; later PRs use the number the forge returns on creation.
+    let forges = forge_clients(config, cli);
+    let mut last_pr = forges[0].latest_number();
 
     let mut prs: Vec<String> = Vec::new();
 
@@ -598,12 +558,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
         println!("dry-run set - no actual pull requests will be generated");
     }
 
-    if !github_tokens.is_empty() {
-        println!(
-            "Using {} GitHub token(s) in round-robin fashion",
-            github_tokens.len()
-        );
-    }
+    println!("Using {} token(s) in round-robin fashion", forges.len());
 
     let stack_plan = config.plan_stacks(pull_requests_to_make);
     if config.pullrequest.stacks_distribution.is_some() {
@@ -659,7 +614,7 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
             filenames.sort();
 
             // Select token for this PR (round-robin)
-            let current_token = &github_tokens[pr_index % github_tokens.len()];
+            let forge = &forges[pr_index % forges.len()];
 
             let stack_info = if *depth > 1 {
                 Some((position, *depth))
@@ -672,21 +627,23 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 last_pr,
                 config,
                 cli.dry_run,
-                current_token,
+                forge,
                 &current_base,
                 stack_info,
                 stack_parent_pr_number,
                 &stack_id,
                 position,
             );
-            if pr_result.is_err() {
-                println!("problem created pr for files: {:?}", filenames);
-                // Abort the rest of this stack: without this PR's branch,
-                // we can't base the next one on top of it.
-                break;
-            }
+            let (pr, deps_count, head_branch) = match pr_result {
+                Ok(created) => created,
+                Err(e) => {
+                    println!("problem created pr for files: {:?}: {}", filenames, e);
+                    // Abort the rest of this stack: without this PR's branch,
+                    // we can't base the next one on top of it.
+                    break;
+                }
+            };
             let duration = start.elapsed();
-            let (pr, deps_count, head_branch) = pr_result.unwrap();
             let pr_number = pr.parse::<u32>().ok();
             if let Some(n) = pr_number {
                 stack_pr_numbers.push(n);
@@ -714,9 +671,9 @@ fn generate(config: &Conf, cli: &Cli) -> anyhow::Result<()> {
                 // Register the stack with GitHub once every PR in it exists,
                 // before enqueueing the tip so the queue sees a complete stack.
                 if *depth > 1 {
-                    register_stack(&stack_pr_numbers, *depth, cli.dry_run, current_token);
+                    register_stack(&stack_pr_numbers, *depth, cli.dry_run, forge);
                 }
-                enqueue(&pr, config, cli, current_token);
+                enqueue(&pr, config, cli, forge);
             } else {
                 println!(
                     "skipping enqueue for pr {} (stack {}/{})",
@@ -801,8 +758,8 @@ fn run() -> anyhow::Result<()> {
 
     match &cli.subcommand {
         Some(Subcommands::Housekeeping {}) => {
-            let token: String = get_first_github_token(&cli);
-            housekeeping(&config, &token);
+            let forges = forge_clients(&config, &cli);
+            housekeeping(&config, &forges[0]);
             Ok(())
         }
         Some(Subcommands::TestSim {}) => {
@@ -857,13 +814,13 @@ fn run() -> anyhow::Result<()> {
         Some(Subcommands::Generate {}) => generate(&config, &cli),
         Some(Subcommands::UploadTargets(ut)) => {
             // upload_targets(&cli, &gen::pullrequest::get_json()); // &ut.github_json);
-            upload_targets(&config, &cli, &ut.github_json);
+            upload_targets(&config, &cli, ut.github_json.as_deref());
             Ok(())
         }
         Some(Subcommands::Enqueue(enqueue_args)) => {
             println!("Enqueuing PR: {}", enqueue_args.pr);
-            let token = get_first_github_token(&cli);
-            enqueue(&enqueue_args.pr, &config, &cli, &token);
+            let forges = forge_clients(&config, &cli);
+            enqueue(&enqueue_args.pr, &config, &cli, &forges[0]);
             Ok(())
         }
         _ => {

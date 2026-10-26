@@ -1,0 +1,61 @@
+# GitLab counterpart of the GitHub Actions workflows in merge-demo/mergequeue-st.
+# Copy this file to the root of the demo project, and .config/mq.toml alongside it.
+#
+# CI/CD variables (masked):
+#   GITLAB_TOKEN  access token with `api` and `write_repository` scopes. Its user
+#                 opens the MRs and posts `/trunk merge`, so it needs Developer access.
+#   TRUNK_TOKEN   Trunk organization API token
+#
+# Add a pipeline schedule (e.g. `*/30 * * * *` on the default branch) to run `factory`.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+.mq:
+  image: buildpack-deps:bookworm-scm
+  before_script:
+    - curl -fsSL https://api.github.com/repos/trunk-io/mergequeue-tool/releases/latest
+      | grep -o 'https://[^"]*x86_64-unknown-linux-gnu.tar.gz' | head -n 1
+      | xargs curl -fsSL | tar xz
+    - ./mq --version
+
+# Opens MRs at the configured rate and comments `/trunk merge` on each, then closes
+# conflicting and stale ones.
+factory:
+  extends: .mq
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
+  timeout: 2h
+  script:
+    # The job token cannot push, and mq needs a local branch that tracks origin.
+    - git remote set-url origin "https://oauth2:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git checkout -B "$CI_DEFAULT_BRANCH" --track "origin/$CI_DEFAULT_BRANCH"
+    - ./mq generate || generate_failed=1
+    - ./mq housekeeping
+    - test -z "$generate_failed"
+
+# Name this job in the queue's required statuses. Trunk tests each MR on a draft MR
+# from a `trunk-merge/...` branch; only there does test-sim sleep and flake.
+test:
+  extends: .mq
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^trunk-merge\//
+      variables:
+        IS_MERGE: "true"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - ./mq test-sim
+
+# Uploads the `deps=[...]` targets from the MR description when mode = "parallelqueue".
+upload-targets:
+  extends: .mq
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^trunk-merge\//
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - if [ "$(./mq config mode)" != "parallelqueue" ]; then exit 0; fi
+    - ./mq upload-targets
