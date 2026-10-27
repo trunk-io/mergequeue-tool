@@ -21,6 +21,13 @@ pub struct Cli {
     #[arg(default_value_t = String::from(""), global = true)]
     pub trunk_token: String,
 
+    #[clap(long = "trunk-repo-id", env = "TRUNK_REPO_ID")]
+    #[arg(
+        help = "Trunk repository ID, used in place of the repo's host/owner/name when uploading impacted targets. Required on GitLab",
+        global = true
+    )]
+    pub trunk_repo_id: Option<String>,
+
     #[clap(long = "dry-run")]
     #[arg(default_value_t = false, global = true)]
     pub dry_run: bool,
@@ -41,6 +48,10 @@ impl Cli {
         }
 
         tokens
+    }
+
+    pub fn trunk_repo_id(&self) -> Option<String> {
+        self.trunk_repo_id.clone().filter(|id| !id.is_empty())
     }
 
     /// Get all GitLab tokens (from CLI args, or the GITLAB_TOKEN environment variable)

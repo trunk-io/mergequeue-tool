@@ -1,5 +1,41 @@
 use gen::github::GitHubAction;
-use gen::trunk::get_targets;
+use gen::repo::RepoRef;
+use gen::trunk::{get_targets, set_impacted_targets_body, TrunkRepo};
+use serde_json::json;
+
+#[test]
+fn test_set_impacted_targets_body_by_repo_id() {
+    let repo = TrunkRepo::Id("6f1c1a52-0f0e-4a8e-9a43-3b1c2d4e5f60".to_string());
+    let body = set_impacted_targets_body(&repo, 7, "abc123", "main", &["a".to_string()]);
+    assert_eq!(
+        body,
+        json!({
+            "repoId": "6f1c1a52-0f0e-4a8e-9a43-3b1c2d4e5f60",
+            "pr": { "number": 7, "sha": "abc123" },
+            "targetBranch": "main",
+            "impactedTargets": ["a"],
+        })
+    );
+}
+
+#[test]
+fn test_set_impacted_targets_body_by_repo_ref() {
+    let repo = TrunkRepo::Ref(RepoRef {
+        host: "github.com".to_string(),
+        owner: "owner".to_string(),
+        name: "repo".to_string(),
+    });
+    let body = set_impacted_targets_body(&repo, 7, "abc123", "main", &["a".to_string()]);
+    assert_eq!(
+        body,
+        json!({
+            "repo": { "host": "github.com", "owner": "owner", "name": "repo" },
+            "pr": { "number": 7, "sha": "abc123" },
+            "targetBranch": "main",
+            "impactedTargets": ["a"],
+        })
+    );
+}
 
 #[test]
 fn test_parse_deps_from_pr_body() {
@@ -154,6 +190,7 @@ fn test_api_trigger_trunk_token_validation() {
         gh_token: vec![],
         gitlab_token: vec![],
         trunk_token: String::new(), // Empty token
+        trunk_repo_id: None,
         dry_run: false,
     };
 
@@ -163,6 +200,7 @@ fn test_api_trigger_trunk_token_validation() {
         gh_token: vec![],
         gitlab_token: vec![],
         trunk_token: "valid_token_123".to_string(),
+        trunk_repo_id: None,
         dry_run: false,
     };
 
