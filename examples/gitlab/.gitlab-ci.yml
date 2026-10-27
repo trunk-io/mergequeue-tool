@@ -5,6 +5,7 @@
 #   GITLAB_TOKEN  access token with `api` and `write_repository` scopes. Its user
 #                 opens the MRs and posts `/trunk merge`, so it needs Developer access.
 #   TRUNK_TOKEN   Trunk organization API token
+#   TRUNK_REPO_ID Trunk repository ID of this project, for `upload-targets`
 #
 # Add a pipeline schedule (e.g. `*/30 * * * *` on the default branch) to run `factory`.
 

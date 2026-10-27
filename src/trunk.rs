@@ -147,14 +147,11 @@ fn upload_targets_gitlab(config: &Conf, cli: &Cli) {
         return;
     }
 
-    let host = config.forge_host().expect("validated by Conf::is_valid");
-    let repo = RepoRef::from_path(&host, &mr.project_path).unwrap_or_else(|| {
-        eprintln!(
-            "CI_PROJECT_PATH is not a group/project path: {}",
-            mr.project_path
-        );
+    let Some(repo_id) = cli.trunk_repo_id() else {
+        eprintln!("TRUNK_REPO_ID is required for upload-targets on GitLab");
+        eprintln!("Provide the Trunk repository ID via --trunk-repo-id flag or TRUNK_REPO_ID environment variable");
         std::process::exit(1);
-    });
+    };
     println!(
         "Uploading {} impacted targets: {:?} (target branch: {})",
         impacted_targets.len(),
@@ -162,7 +159,7 @@ fn upload_targets_gitlab(config: &Conf, cli: &Cli) {
         mr.target_branch
     );
     report_upload(post_targets(
-        &repo,
+        &TrunkRepo::Id(repo_id),
         mr.iid,
         &mr.sha,
         &mr.target_branch,
@@ -224,10 +221,13 @@ fn upload_targets_github(config: &Conf, cli: &Cli, github_json_path: &str) {
         target_branch
     );
 
-    let repo = RepoRef {
-        host: "github.com".to_string(),
-        owner: ga.repo_owner().to_string(),
-        name: ga.repo_name().to_string(),
+    let repo = match cli.trunk_repo_id() {
+        Some(id) => TrunkRepo::Id(id),
+        None => TrunkRepo::Ref(RepoRef {
+            host: "github.com".to_string(),
+            owner: ga.repo_owner().to_string(),
+            name: ga.repo_name().to_string(),
+        }),
     };
     report_upload(post_targets(
         &repo,
@@ -240,8 +240,53 @@ fn upload_targets_github(config: &Conf, cli: &Cli, github_json_path: &str) {
     ));
 }
 
+/// How a `setImpactedTargets` request names the repository. Trunk resolves a
+/// host/owner/name triple only to a GitHub repo, so a GitLab project goes by its Trunk ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrunkRepo {
+    Ref(RepoRef),
+    Id(String),
+}
+
+impl std::fmt::Display for TrunkRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrunkRepo::Ref(repo) => write!(f, "{}/{}", repo.host, repo.path()),
+            TrunkRepo::Id(id) => write!(f, "id {}", id),
+        }
+    }
+}
+
+pub fn set_impacted_targets_body(
+    repo: &TrunkRepo,
+    pr_number: u32,
+    pr_sha: &str,
+    target_branch: &str,
+    impacted_targets: &[String],
+) -> serde_json::Value {
+    let mut body = json!({
+        "pr": {
+            "number": pr_number,
+            "sha": pr_sha,
+        },
+        "targetBranch": target_branch,
+        "impactedTargets": impacted_targets,
+    });
+    match repo {
+        TrunkRepo::Ref(repo) => {
+            body["repo"] = json!({
+                "host": repo.host,
+                "owner": repo.owner,
+                "name": repo.name,
+            })
+        }
+        TrunkRepo::Id(id) => body["repoId"] = json!(id),
+    }
+    body
+}
+
 pub fn post_targets(
-    repo: &RepoRef,
+    repo: &TrunkRepo,
     pr_number: u32,
     pr_sha: &str,
     target_branch: &str,
@@ -255,19 +300,7 @@ pub fn post_targets(
     headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
     headers.insert("x-api-token", api_token.parse().unwrap());
 
-    let body = json!({
-        "repo": {
-            "host": repo.host,
-            "owner": repo.owner,
-            "name": repo.name,
-        },
-        "pr": {
-            "number": pr_number,
-            "sha": pr_sha,
-        },
-        "targetBranch": target_branch,
-        "impactedTargets": impacted_targets,
-    });
+    let body = set_impacted_targets_body(repo, pr_number, pr_sha, target_branch, &impacted_targets);
 
     let res = client
         .post(&format!("https://{}:443/v1/setImpactedTargets", api))
@@ -285,7 +318,7 @@ pub fn post_targets(
         // Show debug info on errors
         println!("API request failed:");
         println!("  URL: https://{}:443/v1/setImpactedTargets", api);
-        println!("  Repository: {}/{}", repo.host, repo.path());
+        println!("  Repository: {}", repo);
         println!("  PR Number: {}", pr_number);
         println!("  Target Branch: {}", target_branch);
         println!("  Impacted Targets: {:?}", impacted_targets);

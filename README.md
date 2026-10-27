@@ -23,6 +23,7 @@ Options:
       --gh-token <GH_TOKEN>     GitHub token (can be specified multiple times, or use GH_TOKEN env var)
       --gitlab-token <TOKEN>    GitLab token with api scope (can be specified multiple times, or use GITLAB_TOKEN env var)
       --trunk-token <TRUNK_TOKEN>  Trunk API token (can also use TRUNK_TOKEN env var)
+      --trunk-repo-id <ID>      Trunk repository ID for upload-targets; required on GitLab (can also use TRUNK_REPO_ID env var)
       --dry-run                 Show what would be done without executing
   -h, --help                    Print help
   -V, --version                 Print version
@@ -86,10 +87,11 @@ the `api` and `write_repository` scopes.
 - Schedule a pipeline on the default branch to run the `factory` job.
 
 On GitLab, `upload-targets` reads the merge request from the `CI_MERGE_REQUEST_*` variables of a
-merge request pipeline, so `--github-json` is not needed. Trunk's public `setImpactedTargets` and
-`submitPullRequest` endpoints do not resolve GitLab projects yet. Until they do, keep
-`mode = "singlequeue"` and `merge.trigger = "comment"`. GitLab has no stacks API, so stacked MRs
-are chained by target branch only.
+merge request pipeline, so `--github-json` is not needed. It also needs the project's Trunk
+repository ID from `--trunk-repo-id` or `TRUNK_REPO_ID`, since Trunk resolves a repo by
+host/owner/name only on GitHub. `submitPullRequest` has no such option yet, so keep
+`merge.trigger = "comment"`. GitLab has no stacks API, so stacked MRs are chained by target branch
+only.
 
 #### Generate
 
